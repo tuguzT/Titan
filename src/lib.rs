@@ -1,9 +1,10 @@
+use std::error::Error;
+
+pub mod version;
+pub mod config;
 mod graphics;
 
-pub fn run(_config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    let _renderer = graphics::Renderer::new();
-    return Ok(());
-}
-
-pub struct Config {
+pub fn run(config: config::Config) -> Result<(), Box<dyn Error>> {
+    let _renderer = graphics::Renderer::new(&config)?;
+    Ok(())
 }
