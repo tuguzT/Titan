@@ -1,11 +1,9 @@
 use std::error::Error;
-use std::ffi::CString;
 
 use ash::{Entry, vk};
 use ash::version::{EntryV1_0, InstanceV1_0};
 
 use crate::config::Config;
-use crate::graphics::utils;
 use crate::version::Version;
 
 pub struct Instance {
