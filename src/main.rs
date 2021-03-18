@@ -1,11 +1,12 @@
 #![windows_subsystem = "windows"]
 
-use titan::{config, version};
+use titan::config::Config;
+use titan::version::Version;
 
 fn main() {
-    let config = config::Config::new(
+    let config = Config::new(
         "test_name",
-        version::Version::default(),
+        Version::default(),
     );
     titan::run(config).unwrap_or_else(|error| {
         eprintln!("Error is: {:#?}", error);

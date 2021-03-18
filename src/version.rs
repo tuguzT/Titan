@@ -1,12 +1,13 @@
+#[derive(Debug)]
 pub struct Version {
-    pub major: u8,
-    pub minor: u8,
-    pub patch: u8,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
 }
 
 impl Version {
-    pub fn new(major: u8, minor: u8, patch: u8) -> Self {
-        Version {
+    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
+        Self {
             major,
             minor,
             patch,
@@ -16,7 +17,7 @@ impl Version {
 
 impl std::default::Default for Version {
     fn default() -> Self {
-        Version {
+        Self {
             major: 0,
             minor: 0,
             patch: 0,

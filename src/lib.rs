@@ -1,10 +1,14 @@
 use std::error::Error;
 
+use graphics::Renderer;
+
+use crate::config::Config;
+
 pub mod version;
 pub mod config;
 mod graphics;
 
-pub fn run(config: config::Config) -> Result<(), Box<dyn Error>> {
-    let _renderer = graphics::Renderer::new(&config)?;
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let _renderer = Renderer::new(&config)?;
     Ok(())
 }
