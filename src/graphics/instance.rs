@@ -1,10 +1,11 @@
 use std::error::Error;
 
-use ash::version::EntryV1_0;
+use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 
 use crate::config::Config;
 use crate::version::Version;
+use std::ffi::CString;
 
 pub struct Instance {
     version: Version,
@@ -32,17 +33,17 @@ impl Instance {
             .enumerate_instance_extension_properties()
             .unwrap_or(Vec::new());
 
-        let application_version = to_vk_version(&config.app_version());
-        let engine_version = to_vk_version(&config.engine_version());
+        let application_name = CString::new(config.app_name())?;
+        let engine_name = CString::new(config.engine_name())?;
         let application_info = vk::ApplicationInfo {
-            p_application_name: config.app_name_c().as_ptr(),
-            application_version,
-            p_engine_name: config.engine_name_c().as_ptr(),
-            engine_version,
+            application_version: to_vk_version(&config.app_version()),
+            engine_version: to_vk_version(&config.engine_version()),
+            p_application_name: application_name.as_ptr(),
+            p_engine_name: engine_name.as_ptr(),
             api_version: vk::API_VERSION_1_2,
             ..Default::default()
         };
-        vk::ApplicationInfo::builder().build();
+
         let instance_create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             ..Default::default()
@@ -50,6 +51,7 @@ impl Instance {
         let instance = unsafe {
             lib_entry.create_instance(&instance_create_info, None)?
         };
+
         println!("Instance was created! {:#?}", version);
         Ok(Self {
             instance,
@@ -78,6 +80,14 @@ impl Instance {
 
     pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
         &self.extension_properties
+    }
+}
+
+impl Drop for Instance {
+    fn drop(&mut self) {
+        unsafe {
+            self.instance.destroy_instance(None);
+        }
     }
 }
 
