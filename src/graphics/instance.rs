@@ -5,7 +5,7 @@ use ash::vk;
 
 use crate::config::Config;
 use crate::version::Version;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 
 pub struct Instance {
     version: Version,
@@ -20,18 +20,14 @@ impl Instance {
         let lib_entry = unsafe {
             ash::Entry::new()?
         };
-        let version = match lib_entry.try_enumerate_instance_version() {
-            Ok(version) => {
-                from_vk_version(version.unwrap_or(vk::API_VERSION_1_0))
-            },
-            Err(_) => Version::default()
+        let version = match lib_entry.try_enumerate_instance_version()? {
+            Some(version) => from_vk_version(version),
+            None => from_vk_version(vk::API_VERSION_1_0),
         };
         let layer_properties = lib_entry
-            .enumerate_instance_layer_properties()
-            .unwrap_or(Vec::new());
+            .enumerate_instance_layer_properties()?;
         let extension_properties = lib_entry
-            .enumerate_instance_extension_properties()
-            .unwrap_or(Vec::new());
+            .enumerate_instance_extension_properties()?;
 
         let application_name = CString::new(config.app_name())?;
         let engine_name = CString::new(config.engine_name())?;
@@ -52,7 +48,6 @@ impl Instance {
             lib_entry.create_instance(&instance_create_info, None)?
         };
 
-        println!("Instance was created! {:#?}", version);
         Ok(Self {
             instance,
             version,
@@ -70,6 +65,10 @@ impl Instance {
         &self.layer_properties
     }
 
+    pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
+        &self.extension_properties
+    }
+
     pub fn instance(&self) -> &ash::Instance {
         &self.instance
     }
@@ -78,8 +77,16 @@ impl Instance {
         &self.lib_entry
     }
 
-    pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
-        &self.extension_properties
+    #[inline]
+    pub unsafe fn proc_addr(&self, name: &CStr) -> *const () {
+        let function = self.lib_entry.get_instance_proc_addr(
+            self.instance.handle(),
+            name.as_ptr()
+        );
+        match function {
+            Some(function) => function as *const (),
+            None => std::ptr::null(),
+        }
     }
 }
 
