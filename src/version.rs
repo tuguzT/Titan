@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter, Result};
+
 #[derive(Debug)]
 pub struct Version {
     pub major: u32,
@@ -15,7 +17,13 @@ impl Version {
     }
 }
 
-impl std::default::Default for Version {
+impl Display for Version {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+impl Default for Version {
     fn default() -> Self {
         Self {
             major: 0,

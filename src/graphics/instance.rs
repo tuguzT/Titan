@@ -1,11 +1,15 @@
 use std::error::Error;
+use std::ffi::CString;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 
 use crate::config::Config;
 use crate::version::Version;
-use std::ffi::{CString, CStr};
+
+const VALIDATION_LAYERS: [&str; 1] = [
+    "VK_LAYER_KHRONOS_validation",
+];
 
 pub struct Instance {
     version: Version,
@@ -75,18 +79,6 @@ impl Instance {
 
     pub fn lib_entry(&self) -> &ash::Entry {
         &self.lib_entry
-    }
-
-    #[inline]
-    pub unsafe fn proc_addr(&self, name: &CStr) -> *const () {
-        let function = self.lib_entry.get_instance_proc_addr(
-            self.instance.handle(),
-            name.as_ptr()
-        );
-        match function {
-            Some(function) => function as *const (),
-            None => std::ptr::null(),
-        }
     }
 }
 
