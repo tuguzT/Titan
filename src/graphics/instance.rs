@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
@@ -7,30 +7,34 @@ use ash::vk;
 use crate::config::Config;
 use crate::version::Version;
 use crate::graphics::utils;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
+use std::borrow::Cow;
+use ash::extensions::ext::DebugUtils;
 
-const VALIDATION_LAYER_NAME: &str = "VK_LAYER_KHRONOS_validation";
+const VALIDATION_LAYER_NAME: &'static [u8] = b"VK_LAYER_KHRONOS_validation\0";
 
 pub struct Instance {
     version: Version,
     available_layer_properties: Vec<vk::LayerProperties>,
     available_extension_properties: Vec<vk::ExtensionProperties>,
-    instance: ash::Instance,
-    lib_entry: ash::Entry,
+    debug_utils_loader: Option<DebugUtils>,
+    debug_utils_messenger: Option<vk::DebugUtilsMessengerEXT>,
+    instance_loader: ash::Instance,
+    entry_loader: ash::Entry,
 }
 
 impl Instance {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
-        let lib_entry = unsafe {
+        let entry_loader = unsafe {
             ash::Entry::new()?
         };
-        let version = match lib_entry.try_enumerate_instance_version()? {
+        let version = match entry_loader.try_enumerate_instance_version()? {
             Some(version) => utils::from_vk_version(version),
             None => utils::from_vk_version(vk::API_VERSION_1_0),
         };
-        let available_layer_properties = lib_entry
+        let available_layer_properties = entry_loader
             .enumerate_instance_layer_properties()?;
-        let available_extension_properties = lib_entry
+        let available_extension_properties = entry_loader
             .enumerate_instance_extension_properties()?;
 
         let application_name = CString::new(config.app_name())?;
@@ -45,11 +49,19 @@ impl Instance {
         };
 
         let mut enabled_layers_names: Vec<*const c_char> = Vec::new();
-        let c_validation_layer_name = CString::new(VALIDATION_LAYER_NAME)?;
+        let mut enabled_extension_names: Vec<*const c_char> = Vec::new();
         if config.enable_validation() {
-            enabled_layers_names.push(c_validation_layer_name.as_ptr());
+            enabled_layers_names.push(VALIDATION_LAYER_NAME.as_ptr() as *const c_char);
+            let available_extension_names: Vec<&CStr> =
+                available_extension_properties.iter()
+                    .map(|extension| unsafe {
+                        CStr::from_ptr(extension.extension_name.as_ptr())
+                    }).collect();
+            let p_debug_utils_extension_name = DebugUtils::name();
+            if available_extension_names.contains(&p_debug_utils_extension_name) {
+                enabled_extension_names.push(p_debug_utils_extension_name.as_ptr());
+            }
         }
-        let enabled_extension_names: Vec<*const c_char> = Vec::new();
         let instance_create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             enabled_layer_count: enabled_layers_names.len() as u32,
@@ -58,16 +70,40 @@ impl Instance {
             pp_enabled_extension_names: enabled_extension_names.as_ptr(),
             ..Default::default()
         };
-        let instance = unsafe {
-            lib_entry.create_instance(&instance_create_info, None)?
+        let instance_loader = unsafe {
+            entry_loader.create_instance(&instance_create_info, None)?
+        };
+
+        let mut debug_utils_loader = None;
+        let mut debug_utils_messenger = None;
+        if config.enable_validation()
+            && enabled_extension_names.contains(&DebugUtils::name().as_ptr())
+        {
+            let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
+                message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+                message_type: vk::DebugUtilsMessageTypeFlagsEXT::all(),
+                pfn_user_callback: Some(vulkan_debug_callback),
+                ..Default::default()
+            };
+            debug_utils_loader = Some(DebugUtils::new(&entry_loader, &instance_loader));
+            debug_utils_messenger = Some(unsafe {
+                let reference = debug_utils_loader.as_ref().unwrap();
+                reference.create_debug_utils_messenger(
+                    &debug_utils_messenger_create_info, None
+                )?
+            });
         };
 
         Ok(Self {
-            instance,
+            instance_loader,
             version,
-            lib_entry,
+            entry_loader,
             available_layer_properties,
             available_extension_properties,
+            debug_utils_loader,
+            debug_utils_messenger,
         })
     }
 
@@ -83,19 +119,56 @@ impl Instance {
         &self.available_extension_properties
     }
 
-    pub fn instance(&self) -> &ash::Instance {
-        &self.instance
+    pub fn instance_loader(&self) -> &ash::Instance {
+        &self.instance_loader
     }
 
-    pub fn lib_entry(&self) -> &ash::Entry {
-        &self.lib_entry
+    pub fn entry_loader(&self) -> &ash::Entry {
+        &self.entry_loader
     }
 }
 
 impl Drop for Instance {
     fn drop(&mut self) {
         unsafe {
-            self.instance.destroy_instance(None);
+            if let Some(debug_utils_loader) = &self.debug_utils_loader {
+                debug_utils_loader.destroy_debug_utils_messenger(
+                    self.debug_utils_messenger.unwrap(), None
+                );
+            }
+            self.instance_loader.destroy_instance(None);
         }
     }
+}
+
+unsafe extern "system" fn vulkan_debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    _user_data: *mut c_void,
+) -> vk::Bool32 {
+    let callback_data = *p_callback_data;
+    let message_id_number = callback_data.message_id_number as i32;
+
+    let message_id_name = if callback_data.p_message_id_name.is_null() {
+        Cow::from("")
+    } else {
+        CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+    };
+
+    let message = if callback_data.p_message.is_null() {
+        Cow::from("")
+    } else {
+        CStr::from_ptr(callback_data.p_message).to_string_lossy()
+    };
+
+    println!(
+        "{:?}:\n{:?} [{} ({})] : {}\n",
+        message_severity,
+        message_type,
+        message_id_name,
+        &message_id_number.to_string(),
+        message,
+    );
+    vk::FALSE
 }
