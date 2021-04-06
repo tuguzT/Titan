@@ -1,7 +1,8 @@
 #![windows_subsystem = "windows"]
 
-use titan::config::Config;
-use titan::version::Version;
+use titan_rs::config::Config;
+use titan_rs::version::Version;
+use titan_rs::run;
 
 fn main() {
     let config = Config::new(
@@ -9,7 +10,7 @@ fn main() {
         Version::default(),
         cfg!(debug_assertions)
     );
-    titan::run(config).unwrap_or_else(|error| {
+    run(config).unwrap_or_else(|error| {
         eprintln!("Error is: {:#?}", error);
         std::process::exit(1)
     })
