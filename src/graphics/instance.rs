@@ -1,17 +1,19 @@
+use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::{CString, CStr};
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_void};
 
+use ash::extensions::ext::DebugUtils;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 
 use crate::config::Config;
-use crate::version::Version;
 use crate::graphics::utils;
-use std::os::raw::{c_char, c_void};
-use std::borrow::Cow;
-use ash::extensions::ext::DebugUtils;
+use crate::version::Version;
 
 const VALIDATION_LAYER_NAME: &'static [u8] = b"VK_LAYER_KHRONOS_validation\0";
+
+const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
     version: Version,
@@ -50,7 +52,7 @@ impl Instance {
 
         let mut enabled_layers_names: Vec<*const c_char> = Vec::new();
         let mut enabled_extension_names: Vec<*const c_char> = Vec::new();
-        if config.enable_validation() {
+        if ENABLE_VALIDATION {
             enabled_layers_names.push(VALIDATION_LAYER_NAME.as_ptr() as *const c_char);
             let available_extension_names: Vec<&CStr> =
                 available_extension_properties.iter()
@@ -76,9 +78,7 @@ impl Instance {
 
         let mut debug_utils_loader = None;
         let mut debug_utils_messenger = None;
-        if config.enable_validation()
-            && enabled_extension_names.contains(&DebugUtils::name().as_ptr())
-        {
+        if ENABLE_VALIDATION && enabled_extension_names.contains(&DebugUtils::name().as_ptr()) {
             let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
                 message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::INFO
                     | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -91,9 +91,10 @@ impl Instance {
             debug_utils_messenger = Some(unsafe {
                 let reference = debug_utils_loader.as_ref().unwrap();
                 reference.create_debug_utils_messenger(
-                    &debug_utils_messenger_create_info, None
+                    &debug_utils_messenger_create_info, None,
                 )?
             });
+            println!("Vulkan validation layer enabled");
         };
 
         Ok(Self {
@@ -151,13 +152,13 @@ unsafe extern "system" fn vulkan_debug_callback(
     let message_id_number = callback_data.message_id_number as i32;
 
     let message_id_name = if callback_data.p_message_id_name.is_null() {
-        Cow::from("")
+        Cow::from("None")
     } else {
         CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
     };
 
     let message = if callback_data.p_message.is_null() {
-        Cow::from("")
+        Cow::from("None")
     } else {
         CStr::from_ptr(callback_data.p_message).to_string_lossy()
     };
