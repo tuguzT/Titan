@@ -11,14 +11,13 @@ impl Config {
     pub fn new(
         app_name: &'static str,
         app_version: Version,
-        engine_version: Version
     ) -> Self {
         let engine_name = "titan";
         Self {
             app_name,
             app_version,
             engine_name,
-            engine_version,
+            engine_version: Version::default(),
         }
     }
 

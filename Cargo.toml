@@ -6,3 +6,5 @@ edition = "2018"
 
 [dependencies]
 ash = "0.32.0"
+log = "0.4.14"
+pretty_env_logger = "0.4.0"

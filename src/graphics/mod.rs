@@ -14,7 +14,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
         let instance = Instance::new(config)?;
-        println!("Instance was created! Version is {}", instance.version());
+        log::info!("Instance was created! Vulkan API version is {}", instance.version());
 
         Ok(Self {
             instance,

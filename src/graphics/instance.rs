@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::graphics::utils;
 use crate::version::Version;
 
-const VALIDATION_LAYER_NAME: &'static [u8] = b"VK_LAYER_KHRONOS_validation\0";
+const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS_validation");
 
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
@@ -53,7 +53,7 @@ impl Instance {
         let mut enabled_layers_names: Vec<*const c_char> = Vec::new();
         let mut enabled_extension_names: Vec<*const c_char> = Vec::new();
         if ENABLE_VALIDATION {
-            enabled_layers_names.push(VALIDATION_LAYER_NAME.as_ptr() as *const c_char);
+            enabled_layers_names.push(VALIDATION_LAYER_NAME);
             let available_extension_names: Vec<&CStr> =
                 available_extension_properties.iter()
                     .map(|extension| unsafe {
@@ -94,7 +94,7 @@ impl Instance {
                     &debug_utils_messenger_create_info, None,
                 )?
             });
-            println!("Vulkan validation layer enabled");
+            log::info!("Vulkan validation layer enabled");
         };
 
         Ok(Self {
@@ -163,7 +163,7 @@ unsafe extern "system" fn vulkan_debug_callback(
         CStr::from_ptr(callback_data.p_message).to_string_lossy()
     };
 
-    println!(
+    let formatted = format!(
         "{:?}:\n{:?} [{} ({})] : {}\n",
         message_severity,
         message_type,
@@ -171,5 +171,14 @@ unsafe extern "system" fn vulkan_debug_callback(
         &message_id_number.to_string(),
         message,
     );
+    if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE {
+        log::trace!("{}", formatted)
+    } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
+        log::info!("{}", formatted);
+    } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
+        log::warn!("{}", formatted);
+    } else {
+        log::error!("{}", formatted);
+    }
     vk::FALSE
 }
