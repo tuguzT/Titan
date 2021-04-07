@@ -6,6 +6,7 @@ use crate::config::Config;
 
 mod utils;
 mod instance;
+mod device;
 
 pub struct Renderer {
     instance: Instance,
