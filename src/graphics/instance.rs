@@ -3,7 +3,7 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 
-use ash::extensions::ext::DebugUtils;
+use ash::extensions::ext;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -19,14 +19,14 @@ pub struct Instance {
     version: Version,
     available_layer_properties: Vec<vk::LayerProperties>,
     available_extension_properties: Vec<vk::ExtensionProperties>,
-    debug_utils_loader: Option<DebugUtils>,
-    debug_utils_messenger: Option<vk::DebugUtilsMessengerEXT>,
+    debug_utils: Option<DebugUtils>,
     instance_loader: ash::Instance,
     entry_loader: ash::Entry,
 }
 
 impl Instance {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
+        // Get entry loader and Vulkan API version
         let entry_loader = unsafe {
             ash::Entry::new()?
         };
@@ -34,11 +34,14 @@ impl Instance {
             Some(version) => utils::from_vk_version(version),
             None => utils::from_vk_version(vk::API_VERSION_1_0),
         };
+
+        // Get available instance properties
         let available_layer_properties = entry_loader
             .enumerate_instance_layer_properties()?;
         let available_extension_properties = entry_loader
             .enumerate_instance_extension_properties()?;
 
+        // Setup application info for Vulkan API
         let application_name = CString::new(config.app_name())?;
         let engine_name = CString::new(config.engine_name())?;
         let application_info = vk::ApplicationInfo {
@@ -50,8 +53,12 @@ impl Instance {
             ..Default::default()
         };
 
-        let mut enabled_layers_names: Vec<*const c_char> = Vec::new();
-        let mut enabled_extension_names: Vec<*const c_char> = Vec::new();
+        // Initialize containers for raw pointers of names
+        let mut enabled_layers_names = Vec::new();
+        let mut enabled_extension_names = Vec::new();
+
+        // Push names' pointers into container if validation was enabled
+        let debug_utils_extension_name = ext::DebugUtils::name();
         if ENABLE_VALIDATION {
             enabled_layers_names.push(VALIDATION_LAYER_NAME);
             let available_extension_names: Vec<&CStr> =
@@ -59,11 +66,12 @@ impl Instance {
                     .map(|extension| unsafe {
                         CStr::from_ptr(extension.extension_name.as_ptr())
                     }).collect();
-            let p_debug_utils_extension_name = DebugUtils::name();
-            if available_extension_names.contains(&p_debug_utils_extension_name) {
-                enabled_extension_names.push(p_debug_utils_extension_name.as_ptr());
+            if available_extension_names.contains(&debug_utils_extension_name) {
+                enabled_extension_names.push(debug_utils_extension_name.as_ptr());
             }
         }
+
+        // Initialize instance create info and get an instance
         let instance_create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             enabled_layer_count: enabled_layers_names.len() as u32,
@@ -76,25 +84,14 @@ impl Instance {
             entry_loader.create_instance(&instance_create_info, None)?
         };
 
-        let mut debug_utils_loader = None;
-        let mut debug_utils_messenger = None;
-        if ENABLE_VALIDATION && enabled_extension_names.contains(&DebugUtils::name().as_ptr()) {
-            let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
-                message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-                message_type: vk::DebugUtilsMessageTypeFlagsEXT::all(),
-                pfn_user_callback: Some(vulkan_debug_callback),
-                ..Default::default()
-            };
-            debug_utils_loader = Some(DebugUtils::new(&entry_loader, &instance_loader));
-            debug_utils_messenger = Some(unsafe {
-                let reference = debug_utils_loader.as_ref().unwrap();
-                reference.create_debug_utils_messenger(
-                    &debug_utils_messenger_create_info, None,
-                )?
-            });
+        // Initialize debug utils extension
+        let debug_utils = if ENABLE_VALIDATION &&
+            enabled_extension_names.contains(&debug_utils_extension_name.as_ptr()) {
+            let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
             log::info!("Vulkan validation layer enabled");
+            Some(returnable)
+        } else {
+            None
         };
 
         Ok(Self {
@@ -103,8 +100,7 @@ impl Instance {
             entry_loader,
             available_layer_properties,
             available_extension_properties,
-            debug_utils_loader,
-            debug_utils_messenger,
+            debug_utils,
         })
     }
 
@@ -131,13 +127,44 @@ impl Instance {
 
 impl Drop for Instance {
     fn drop(&mut self) {
+        self.debug_utils = None;
         unsafe {
-            if let Some(debug_utils_loader) = &self.debug_utils_loader {
-                debug_utils_loader.destroy_debug_utils_messenger(
-                    self.debug_utils_messenger.unwrap(), None
-                );
-            }
             self.instance_loader.destroy_instance(None);
+        }
+    }
+}
+
+struct DebugUtils {
+    loader: ext::DebugUtils,
+    messenger: vk::DebugUtilsMessengerEXT,
+}
+
+impl DebugUtils {
+    pub fn new(
+        entry_loader: &ash::Entry,
+        instance_loader: &ash::Instance,
+    ) -> Result<Self, Box<dyn Error>> {
+        let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
+            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::all(),
+            message_type: vk::DebugUtilsMessageTypeFlagsEXT::all(),
+            pfn_user_callback: Some(vulkan_debug_callback),
+            ..Default::default()
+        };
+        let loader = ext::DebugUtils::new(entry_loader, instance_loader);
+        let messenger = unsafe {
+            loader.create_debug_utils_messenger(&messenger_create_info, None)?
+        };
+        Ok(Self {
+            loader,
+            messenger,
+        })
+    }
+}
+
+impl Drop for DebugUtils {
+    fn drop(&mut self) {
+        unsafe {
+            self.loader.destroy_debug_utils_messenger(self.messenger, None)
         }
     }
 }
@@ -164,7 +191,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     };
 
     let formatted = format!(
-        "{:?}:\n{:?} [{} ({})] : {}\n",
+        "{:?}:{:?} [{} ({})] : {}",
         message_severity,
         message_type,
         message_id_name,
@@ -172,7 +199,7 @@ unsafe extern "system" fn vulkan_debug_callback(
         message,
     );
     if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE {
-        log::trace!("{}", formatted)
+        log::trace!("{}", formatted);
     } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
         log::info!("{}", formatted);
     } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
