@@ -125,8 +125,8 @@ impl Instance {
         };
         let physical_devices = handles.iter()
             .map(|handle| PhysicalDevice::new(self, *handle))
-            .collect();
-        Ok(physical_devices)
+            .collect::<Result<Vec<_>, _>>();
+        physical_devices
     }
 }
 

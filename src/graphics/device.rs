@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ffi::CStr;
 
 use ash::version::InstanceV1_0;
@@ -13,10 +14,12 @@ pub struct PhysicalDevice {
     features: vk::PhysicalDeviceFeatures,
     queue_family_properties: Vec<vk::QueueFamilyProperties>,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
+    layer_properties: Vec<vk::LayerProperties>,
+    extension_properties: Vec<vk::ExtensionProperties>,
 }
 
 impl PhysicalDevice {
-    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Self {
+    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
         let properties = unsafe {
             instance.loader().get_physical_device_properties(handle)
         };
@@ -29,13 +32,37 @@ impl PhysicalDevice {
         let memory_properties = unsafe {
             instance.loader().get_physical_device_memory_properties(handle)
         };
-        Self {
+
+        let layer_properties = unsafe {
+            let mut count: u32 = 0;
+            instance.loader().fp_v1_0().enumerate_device_layer_properties(
+                handle,
+                &mut count,
+                std::ptr::null_mut(),
+            ).result()?;
+            let mut vector = Vec::with_capacity(count as usize);
+            instance.loader().fp_v1_0().enumerate_device_layer_properties(
+                handle,
+                &mut count,
+                vector.as_mut_ptr(),
+            ).result()?;
+            vector.set_len(count as usize);
+            vector
+        };
+
+        let extension_properties = unsafe {
+            instance.loader().enumerate_device_extension_properties(handle)?
+        };
+
+        Ok(Self {
             handle,
             properties,
             features,
             queue_family_properties,
             memory_properties,
-        }
+            layer_properties,
+            extension_properties,
+        })
     }
 
     pub fn version(&self) -> Version {
