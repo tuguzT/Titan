@@ -6,7 +6,7 @@ use crate::version::Version;
 macro_rules! c_str {
     ($s:expr) => {
         unsafe {
-            std::ffi::CStr::from_ptr(crate::c_str_ptr($s))
+            std::ffi::CStr::from_ptr(crate::c_str_ptr!($s))
         }
     };
 }
