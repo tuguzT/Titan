@@ -58,7 +58,6 @@ impl Instance {
         let mut enabled_extension_names = Vec::new();
 
         // Push names' pointers into container if validation was enabled
-        let debug_utils_extension_name = ext::DebugUtils::name();
         if ENABLE_VALIDATION {
             enabled_layers_names.push(VALIDATION_LAYER_NAME);
             let available_extension_names: Vec<&CStr> =
@@ -66,8 +65,8 @@ impl Instance {
                     .map(|extension| unsafe {
                         CStr::from_ptr(extension.extension_name.as_ptr())
                     }).collect();
-            if available_extension_names.contains(&debug_utils_extension_name) {
-                enabled_extension_names.push(debug_utils_extension_name.as_ptr());
+            if available_extension_names.contains(&DebugUtils::name()) {
+                enabled_extension_names.push(DebugUtils::name().as_ptr());
             }
         }
 
@@ -86,7 +85,7 @@ impl Instance {
 
         // Initialize debug utils extension
         let debug_utils = if ENABLE_VALIDATION &&
-            enabled_extension_names.contains(&debug_utils_extension_name.as_ptr()) {
+            enabled_extension_names.contains(&DebugUtils::name().as_ptr()) {
             let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
             log::info!("Vulkan validation layer enabled");
             Some(returnable)
@@ -158,6 +157,10 @@ impl DebugUtils {
             loader,
             messenger,
         })
+    }
+
+    pub fn name() -> &'static CStr {
+        ext::DebugUtils::name()
     }
 }
 
