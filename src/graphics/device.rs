@@ -8,7 +8,7 @@ use crate::graphics::instance::Instance;
 use crate::graphics::utils;
 use crate::version::Version;
 
-pub struct PhysicalDevice<'a> {
+pub struct PhysicalDevice {
     handle: vk::PhysicalDevice,
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
@@ -16,11 +16,10 @@ pub struct PhysicalDevice<'a> {
     memory_properties: vk::PhysicalDeviceMemoryProperties,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
-    instance: &'a Instance,
 }
 
-impl<'a> PhysicalDevice<'a> {
-    pub fn new(instance: &'a Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
+impl PhysicalDevice {
+    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
         let properties = unsafe {
             instance.loader().get_physical_device_properties(handle)
         };
@@ -63,7 +62,6 @@ impl<'a> PhysicalDevice<'a> {
             memory_properties,
             layer_properties,
             extension_properties,
-            instance,
         })
     }
 
@@ -75,9 +73,5 @@ impl<'a> PhysicalDevice<'a> {
         unsafe {
             CStr::from_ptr(self.properties.device_name.as_ptr())
         }
-    }
-
-    pub fn instance(&self) -> &'a Instance {
-        self.instance
     }
 }
