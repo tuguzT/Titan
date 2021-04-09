@@ -51,37 +51,44 @@ unsafe extern "system" fn callback(
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _user_data: *mut c_void,
 ) -> vk::Bool32 {
-    let callback_data = *p_callback_data;
-    let message_id_number = callback_data.message_id_number as i32;
+    if !p_callback_data.is_null() {
+        let callback_data = *p_callback_data;
+        let message_id_number = callback_data.message_id_number as i32;
 
-    let message_id_name = if callback_data.p_message_id_name.is_null() {
-        Cow::from("None")
-    } else {
-        CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
-    };
+        let message_id_name = if callback_data.p_message_id_name.is_null() {
+            Cow::from("None")
+        } else {
+            CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+        };
 
-    let message = if callback_data.p_message.is_null() {
-        Cow::from("None")
-    } else {
-        CStr::from_ptr(callback_data.p_message).to_string_lossy()
-    };
+        let message = if callback_data.p_message.is_null() {
+            Cow::from("None")
+        } else {
+            CStr::from_ptr(callback_data.p_message).to_string_lossy()
+        };
 
-    let formatted = format!(
-        "{:?}:{:?} [{} ({})] : {}",
-        message_severity,
-        message_type,
-        message_id_name,
-        &message_id_number.to_string(),
-        message,
-    );
-    if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE {
-        log::trace!("{}", formatted);
-    } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
-        log::info!("{}", formatted);
-    } else if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
-        log::warn!("{}", formatted);
-    } else {
-        log::error!("{}", formatted);
+        let formatted = format!(
+            "{:?}:{:?} [{} ({})] : {}",
+            message_severity,
+            message_type,
+            message_id_name,
+            &message_id_number.to_string(),
+            message,
+        );
+        match message_severity {
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
+                log::trace!("{}", formatted)
+            }
+            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
+                log::info!("{}", formatted)
+            }
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
+                log::warn!("{}", formatted)
+            }
+            _ => {
+                log::error!("{}", formatted)
+            }
+        }
     }
     vk::FALSE
 }

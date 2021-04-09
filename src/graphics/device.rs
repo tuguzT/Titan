@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::CStr;
 
@@ -75,6 +76,40 @@ impl PhysicalDevice {
             CStr::from_ptr(self.properties.device_name.as_ptr())
         }
     }
+
+    pub fn is_suitable(&self) -> bool {
+        true
+    }
+
+    pub fn score(&self) -> u32 {
+        let mut score = match self.properties.device_type {
+            vk::PhysicalDeviceType::DISCRETE_GPU => 1000,
+            vk::PhysicalDeviceType::INTEGRATED_GPU => 100,
+            _ => 0
+        };
+        score += self.properties.limits.max_image_dimension2_d;
+        score
+    }
+}
+
+impl PartialEq for PhysicalDevice {
+    fn eq(&self, other: &Self) -> bool {
+        self.score().eq(&other.score())
+    }
+}
+
+impl PartialOrd for PhysicalDevice {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.score().partial_cmp(&other.score())
+    }
+}
+
+impl Eq for PhysicalDevice {}
+
+impl Ord for PhysicalDevice {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.score().cmp(&other.score())
+    }
 }
 
 pub struct Device {
@@ -105,8 +140,8 @@ impl Device {
         })
     }
 
-    pub fn handle(&self) -> vk::Device {
-        self.loader.handle()
+    pub fn loader(&self) -> &ash::Device {
+        &self.loader
     }
 
     pub fn physical_device(&self) -> &PhysicalDevice {

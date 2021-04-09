@@ -97,28 +97,28 @@ impl Instance {
         };
 
         // Enumerate enabled layers
-        let enabled_layer_properties_names = enabled_layer_properties_names.iter()
-            .map(|item| unsafe {
+        let enabled_layer_properties_names: Vec<&CStr> = enabled_layer_properties_names
+            .iter().map(|item| unsafe {
                 CStr::from_ptr(*item)
-            }).collect::<Vec<_>>();
-        let layer_properties = available_layer_properties.into_iter()
-            .filter(|item| {
+            }).collect();
+        let layer_properties = available_layer_properties
+            .into_iter().filter(|item| {
                 enabled_layer_properties_names.contains(&unsafe {
                     CStr::from_ptr(item.layer_name.as_ptr())
                 })
-            }).collect::<Vec<_>>();
+            }).collect();
 
         // Enumerate enabled extensions
-        let enabled_extension_properties_names = enabled_extension_properties_names.iter()
-            .map(|item| unsafe {
+        let enabled_extension_properties_names: Vec<&CStr> = enabled_extension_properties_names
+            .iter().map(|item| unsafe {
                 CStr::from_ptr(*item)
-            }).collect::<Vec<_>>();
-        let extension_properties = available_extension_properties.into_iter()
-            .filter(|item| {
+            }).collect();
+        let extension_properties = available_extension_properties
+            .into_iter().filter(|item| {
                 enabled_extension_properties_names.contains(&unsafe {
                     CStr::from_ptr(item.extension_name.as_ptr())
                 })
-            }).collect::<Vec<_>>();
+            }).collect();
 
         Ok(Self {
             _entry_loader: entry_loader,
