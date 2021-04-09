@@ -74,7 +74,7 @@ impl Instance {
         }
 
         // Initialize instance create info and get an instance
-        let instance_create_info = vk::InstanceCreateInfo {
+        let create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             enabled_layer_count: enabled_layer_properties_names.len() as u32,
             pp_enabled_layer_names: enabled_layer_properties_names.as_ptr(),
@@ -83,7 +83,7 @@ impl Instance {
             ..Default::default()
         };
         let instance_loader = unsafe {
-            entry_loader.create_instance(&instance_create_info, None)?
+            entry_loader.create_instance(&create_info, None)?
         };
 
         // Initialize debug utils extension

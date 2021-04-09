@@ -1,21 +1,22 @@
 use std::error::Error;
 use std::ffi::CStr;
 
-use ash::version::InstanceV1_0;
+use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
 use crate::graphics::instance::Instance;
 use crate::graphics::utils;
 use crate::version::Version;
 
+#[derive(Clone)]
 pub struct PhysicalDevice {
-    handle: vk::PhysicalDevice,
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
     queue_family_properties: Vec<vk::QueueFamilyProperties>,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
+    handle: vk::PhysicalDevice,
 }
 
 impl PhysicalDevice {
@@ -73,5 +74,50 @@ impl PhysicalDevice {
         unsafe {
             CStr::from_ptr(self.properties.device_name.as_ptr())
         }
+    }
+}
+
+pub struct Device {
+    physical_device: PhysicalDevice,
+    loader: ash::Device,
+}
+
+impl Device {
+    pub fn new(
+        instance: &Instance,
+        physical_device: PhysicalDevice,
+    ) -> Result<Self, Box<dyn Error>> {
+        let create_info = vk::DeviceCreateInfo {
+            ..Default::default()
+        };
+
+        let loader = unsafe {
+            instance.loader().create_device(
+                physical_device.handle,
+                &create_info,
+                None,
+            )?
+        };
+
+        Ok(Self {
+            loader,
+            physical_device,
+        })
+    }
+
+    pub fn handle(&self) -> vk::Device {
+        self.loader.handle()
+    }
+
+    pub fn physical_device(&self) -> &PhysicalDevice {
+        &self.physical_device
+    }
+}
+
+impl Drop for Device {
+    fn drop(&mut self) {
+        unsafe {
+            self.loader.destroy_device(None)
+        };
     }
 }
