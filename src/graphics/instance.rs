@@ -27,19 +27,16 @@ pub struct Instance {
 impl Instance {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
-        let entry_loader = unsafe {
-            ash::Entry::new()?
-        };
+        let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {
             Some(version) => utils::from_vk_version(version),
             None => utils::from_vk_version(vk::API_VERSION_1_0),
         };
 
         // Get available instance properties
-        let available_layer_properties = entry_loader
-            .enumerate_instance_layer_properties()?;
-        let available_extension_properties = entry_loader
-            .enumerate_instance_extension_properties()?;
+        let available_layer_properties = entry_loader.enumerate_instance_layer_properties()?;
+        let available_extension_properties =
+            entry_loader.enumerate_instance_extension_properties()?;
 
         // Setup application info for Vulkan API
         let application_name = CString::new(config.app_name())?;
@@ -54,14 +51,14 @@ impl Instance {
         };
 
         // Initialize containers for layers' and extensions' names
-        let _available_layer_properties_names = available_layer_properties.iter()
-            .map(|item| unsafe {
-                CStr::from_ptr(item.layer_name.as_ptr())
-            }).collect::<Vec<_>>();
-        let available_extension_properties_names = available_extension_properties.iter()
-            .map(|item| unsafe {
-                CStr::from_ptr(item.extension_name.as_ptr())
-            }).collect::<Vec<_>>();
+        let _available_layer_properties_names = available_layer_properties
+            .iter()
+            .map(|item| unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
+            .collect::<Vec<_>>();
+        let available_extension_properties_names = available_extension_properties
+            .iter()
+            .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) })
+            .collect::<Vec<_>>();
         let mut enabled_layer_properties_names = Vec::new();
         let mut enabled_extension_properties_names = Vec::new();
 
@@ -82,13 +79,12 @@ impl Instance {
             pp_enabled_extension_names: enabled_extension_properties_names.as_ptr(),
             ..Default::default()
         };
-        let instance_loader = unsafe {
-            entry_loader.create_instance(&create_info, None)?
-        };
+        let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
 
         // Initialize debug utils extension
-        let debug_utils = if ENABLE_VALIDATION &&
-            enabled_extension_properties_names.contains(&DebugUtils::name().as_ptr()) {
+        let debug_utils = if ENABLE_VALIDATION
+            && enabled_extension_properties_names.contains(&DebugUtils::name().as_ptr())
+        {
             let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
             log::info!("Vulkan validation layer enabled");
             Some(returnable)
@@ -98,27 +94,29 @@ impl Instance {
 
         // Enumerate enabled layers
         let enabled_layer_properties_names: Vec<&CStr> = enabled_layer_properties_names
-            .iter().map(|item| unsafe {
-                CStr::from_ptr(*item)
-            }).collect();
+            .iter()
+            .map(|item| unsafe { CStr::from_ptr(*item) })
+            .collect();
         let layer_properties = available_layer_properties
-            .into_iter().filter(|item| {
-                enabled_layer_properties_names.contains(&unsafe {
-                    CStr::from_ptr(item.layer_name.as_ptr())
-                })
-            }).collect();
+            .into_iter()
+            .filter(|item| {
+                enabled_layer_properties_names
+                    .contains(&unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
+            })
+            .collect();
 
         // Enumerate enabled extensions
         let enabled_extension_properties_names: Vec<&CStr> = enabled_extension_properties_names
-            .iter().map(|item| unsafe {
-                CStr::from_ptr(*item)
-            }).collect();
+            .iter()
+            .map(|item| unsafe { CStr::from_ptr(*item) })
+            .collect();
         let extension_properties = available_extension_properties
-            .into_iter().filter(|item| {
-                enabled_extension_properties_names.contains(&unsafe {
-                    CStr::from_ptr(item.extension_name.as_ptr())
-                })
-            }).collect();
+            .into_iter()
+            .filter(|item| {
+                enabled_extension_properties_names
+                    .contains(&unsafe { CStr::from_ptr(item.extension_name.as_ptr()) })
+            })
+            .collect();
 
         Ok(Self {
             _entry_loader: entry_loader,
@@ -147,9 +145,10 @@ impl Instance {
     }
 
     pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
-        unsafe {
-            self.instance_loader.enumerate_physical_devices()?
-        }.iter().map(|handle| PhysicalDevice::new(self, *handle)).collect()
+        unsafe { self.instance_loader.enumerate_physical_devices()? }
+            .iter()
+            .map(|handle| PhysicalDevice::new(self, *handle))
+            .collect()
     }
 }
 

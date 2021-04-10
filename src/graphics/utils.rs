@@ -5,9 +5,7 @@ use crate::version::Version;
 #[macro_export]
 macro_rules! c_str {
     ($s:expr) => {
-        unsafe {
-            std::ffi::CStr::from_ptr(crate::c_str_ptr!($s))
-        }
+        unsafe { std::ffi::CStr::from_ptr(crate::c_str_ptr!($s)) }
     };
 }
 
@@ -20,11 +18,7 @@ macro_rules! c_str_ptr {
 
 #[inline]
 pub fn to_vk_version(version: &Version) -> u32 {
-    vk::make_version(
-        version.major,
-        version.minor,
-        version.patch,
-    )
+    vk::make_version(version.major, version.minor, version.patch)
 }
 
 #[inline]

@@ -8,10 +8,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(
-        app_name: &'static str,
-        app_version: Version,
-    ) -> Self {
+    pub fn new(app_name: &'static str, app_version: Version) -> Self {
         let engine_name = "titan";
         Self {
             app_name,

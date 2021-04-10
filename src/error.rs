@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, Result, Debug};
+use std::fmt::{Debug, Display, Formatter, Result};
 
 pub struct Error {
     message: String,

@@ -23,13 +23,9 @@ impl DebugUtils {
             ..Default::default()
         };
         let loader = ext::DebugUtils::new(entry_loader, instance_loader);
-        let messenger = unsafe {
-            loader.create_debug_utils_messenger(&messenger_create_info, None)?
-        };
-        Ok(Self {
-            loader,
-            messenger,
-        })
+        let messenger =
+            unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
+        Ok(Self { loader, messenger })
     }
 
     pub fn name() -> &'static CStr {
@@ -40,7 +36,8 @@ impl DebugUtils {
 impl Drop for DebugUtils {
     fn drop(&mut self) {
         unsafe {
-            self.loader.destroy_debug_utils_messenger(self.messenger, None)
+            self.loader
+                .destroy_debug_utils_messenger(self.messenger, None)
         }
     }
 }
@@ -72,7 +69,7 @@ unsafe extern "system" fn callback(
             message_severity,
             message_type,
             message_id_name,
-            &message_id_number.to_string(),
+            message_id_number,
             message,
         );
         match message_severity {

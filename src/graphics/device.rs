@@ -22,38 +22,40 @@ pub struct PhysicalDevice {
 
 impl PhysicalDevice {
     pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
-        let properties = unsafe {
-            instance.loader().get_physical_device_properties(handle)
-        };
-        let features = unsafe {
-            instance.loader().get_physical_device_features(handle)
-        };
+        let properties = unsafe { instance.loader().get_physical_device_properties(handle) };
+        let features = unsafe { instance.loader().get_physical_device_features(handle) };
         let queue_family_properties = unsafe {
-            instance.loader().get_physical_device_queue_family_properties(handle)
+            instance
+                .loader()
+                .get_physical_device_queue_family_properties(handle)
         };
         let memory_properties = unsafe {
-            instance.loader().get_physical_device_memory_properties(handle)
+            instance
+                .loader()
+                .get_physical_device_memory_properties(handle)
         };
 
         let layer_properties = unsafe {
             let mut count: u32 = 0;
-            instance.loader().fp_v1_0().enumerate_device_layer_properties(
-                handle,
-                &mut count,
-                std::ptr::null_mut(),
-            ).result()?;
+            instance
+                .loader()
+                .fp_v1_0()
+                .enumerate_device_layer_properties(handle, &mut count, std::ptr::null_mut())
+                .result()?;
             let mut vector = Vec::with_capacity(count as usize);
-            instance.loader().fp_v1_0().enumerate_device_layer_properties(
-                handle,
-                &mut count,
-                vector.as_mut_ptr(),
-            ).result()?;
+            instance
+                .loader()
+                .fp_v1_0()
+                .enumerate_device_layer_properties(handle, &mut count, vector.as_mut_ptr())
+                .result()?;
             vector.set_len(count as usize);
             vector
         };
 
         let extension_properties = unsafe {
-            instance.loader().enumerate_device_extension_properties(handle)?
+            instance
+                .loader()
+                .enumerate_device_extension_properties(handle)?
         };
 
         Ok(Self {
@@ -72,9 +74,7 @@ impl PhysicalDevice {
     }
 
     pub fn name(&self) -> &CStr {
-        unsafe {
-            CStr::from_ptr(self.properties.device_name.as_ptr())
-        }
+        unsafe { CStr::from_ptr(self.properties.device_name.as_ptr()) }
     }
 
     pub fn is_suitable(&self) -> bool {
@@ -85,7 +85,7 @@ impl PhysicalDevice {
         let mut score = match self.properties.device_type {
             vk::PhysicalDeviceType::DISCRETE_GPU => 1000,
             vk::PhysicalDeviceType::INTEGRATED_GPU => 100,
-            _ => 0
+            _ => 0,
         };
         score += self.properties.limits.max_image_dimension2_d;
         score
@@ -127,11 +127,9 @@ impl Device {
         };
 
         let loader = unsafe {
-            instance.loader().create_device(
-                physical_device.handle,
-                &create_info,
-                None,
-            )?
+            instance
+                .loader()
+                .create_device(physical_device.handle, &create_info, None)?
         };
 
         Ok(Self {
@@ -151,8 +149,6 @@ impl Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
-        unsafe {
-            self.loader.destroy_device(None)
-        };
+        unsafe { self.loader.destroy_device(None) };
     }
 }
