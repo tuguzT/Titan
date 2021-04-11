@@ -53,37 +53,45 @@ impl Instance {
         // Initialize containers for layers' and extensions' names
         let _available_layer_properties_names = available_layer_properties
             .iter()
-            .map(|item| unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
-            .collect::<Vec<_>>();
-        let available_extension_properties_names = available_extension_properties
+            .map(|item| unsafe { CStr::from_ptr(item.layer_name.as_ptr()) });
+        let mut available_extension_properties_names = available_extension_properties
             .iter()
-            .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) })
-            .collect::<Vec<_>>();
-        let mut enabled_layer_properties_names = Vec::new();
-        let mut enabled_extension_properties_names = Vec::new();
+            .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) });
+        let mut enabled_layer_properties_names: Vec<&CStr> = Vec::new();
+        let mut enabled_extension_properties_names: Vec<&CStr> = Vec::new();
 
-        // Push names' pointers into container if validation was enabled
+        // Push names' pointers into containers if validation was enabled
+        let validation_layer_name = unsafe { CStr::from_ptr(VALIDATION_LAYER_NAME) };
         if ENABLE_VALIDATION {
-            enabled_layer_properties_names.push(VALIDATION_LAYER_NAME);
-            if available_extension_properties_names.contains(&DebugUtils::name()) {
-                enabled_extension_properties_names.push(DebugUtils::name().as_ptr());
+            enabled_layer_properties_names.push(validation_layer_name);
+            if available_extension_properties_names.any(|item| item == DebugUtils::name()) {
+                enabled_extension_properties_names.push(DebugUtils::name());
             }
         }
 
         // Initialize instance create info and get an instance
+        let p_enabled_layer_properties_names: Vec<*const c_char> = enabled_layer_properties_names
+            .iter()
+            .map(|item| item.as_ptr())
+            .collect();
+        let p_enabled_extension_properties_names: Vec<*const c_char> =
+            enabled_extension_properties_names
+                .iter()
+                .map(|item| item.as_ptr())
+                .collect();
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
-            enabled_layer_count: enabled_layer_properties_names.len() as u32,
-            pp_enabled_layer_names: enabled_layer_properties_names.as_ptr(),
-            enabled_extension_count: enabled_extension_properties_names.len() as u32,
-            pp_enabled_extension_names: enabled_extension_properties_names.as_ptr(),
+            enabled_layer_count: p_enabled_layer_properties_names.len() as u32,
+            pp_enabled_layer_names: p_enabled_layer_properties_names.as_ptr(),
+            enabled_extension_count: p_enabled_extension_properties_names.len() as u32,
+            pp_enabled_extension_names: p_enabled_extension_properties_names.as_ptr(),
             ..Default::default()
         };
         let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
 
         // Initialize debug utils extension
         let debug_utils = if ENABLE_VALIDATION
-            && enabled_extension_properties_names.contains(&DebugUtils::name().as_ptr())
+            && enabled_extension_properties_names.contains(&DebugUtils::name())
         {
             let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
             log::info!("Vulkan validation layer enabled");
@@ -93,10 +101,6 @@ impl Instance {
         };
 
         // Enumerate enabled layers
-        let enabled_layer_properties_names: Vec<&CStr> = enabled_layer_properties_names
-            .iter()
-            .map(|item| unsafe { CStr::from_ptr(*item) })
-            .collect();
         let layer_properties = available_layer_properties
             .into_iter()
             .filter(|item| {
@@ -106,10 +110,6 @@ impl Instance {
             .collect();
 
         // Enumerate enabled extensions
-        let enabled_extension_properties_names: Vec<&CStr> = enabled_extension_properties_names
-            .iter()
-            .map(|item| unsafe { CStr::from_ptr(*item) })
-            .collect();
         let extension_properties = available_extension_properties
             .into_iter()
             .filter(|item| {

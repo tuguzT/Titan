@@ -66,11 +66,7 @@ unsafe extern "system" fn callback(
 
         let formatted = format!(
             "{:?}:{:?} [{} ({})] : {}",
-            message_severity,
-            message_type,
-            message_id_name,
-            message_id_number,
-            message,
+            message_severity, message_type, message_id_name, message_id_number, message,
         );
         match message_severity {
             vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
