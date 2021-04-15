@@ -1,9 +1,10 @@
 use std::error::Error;
 
+use device::{Device, PhysicalDevice};
 use instance::Instance;
 
 use crate::config::Config;
-use crate::graphics::device::PhysicalDevice;
+use crate::error::ErrorType;
 
 mod debug;
 mod device;
@@ -11,6 +12,7 @@ mod instance;
 mod utils;
 
 pub struct Renderer {
+    devices: Vec<Device>,
     physical_devices: Vec<PhysicalDevice>,
     instance: Instance,
 }
@@ -30,14 +32,21 @@ impl Renderer {
         if physical_devices.is_empty() {
             return Err(Box::new(crate::error::Error::new(
                 "no suitable physical devices were found".to_string(),
+                ErrorType::Graphics,
             )));
         }
         physical_devices.sort();
         physical_devices.reverse();
+        let devices = vec![Device::new(&instance, physical_devices.first().unwrap())?];
 
         Ok(Self {
             instance,
             physical_devices,
+            devices,
         })
+    }
+
+    pub fn render(&self) {
+        log::debug!("Rendering a frame!");
     }
 }
