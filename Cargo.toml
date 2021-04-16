@@ -5,6 +5,7 @@ authors = ["tuguzT <timurka.tugushev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-ash = "0.32.0"
+ash = "0.32.1"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
+winit = "0.24.0"

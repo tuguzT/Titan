@@ -18,6 +18,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
+        use crate::error::{Error, ErrorType};
+
         let instance = Instance::new(config)?;
         log::info!(
             "Instance was created! Vulkan API version is {}",
@@ -29,9 +31,9 @@ impl Renderer {
             .filter(|item| item.is_suitable())
             .collect();
         if physical_devices.is_empty() {
-            return Err(Box::new(crate::error::Error::new(
+            return Err(Box::new(Error::new(
                 "no suitable physical devices were found",
-                crate::error::ErrorType::Graphics,
+                ErrorType::Graphics,
             )));
         }
         physical_devices.sort_unstable();

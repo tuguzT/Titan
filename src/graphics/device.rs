@@ -107,6 +107,8 @@ impl Device {
         instance: &Instance,
         physical_device: &PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
+        use crate::error::{Error, ErrorType};
+
         let layer_properties = unsafe {
             let mut count = 0;
             instance
@@ -150,9 +152,9 @@ impl Device {
         let queue_create_infos = vec![vk::DeviceQueueCreateInfo {
             queue_family_index: graphics_queue_family_properties
                 .get(0)
-                .ok_or(crate::error::Error::new(
+                .ok_or(Error::new(
                     "no queues with support of graphics",
-                    crate::error::ErrorType::Graphics,
+                    ErrorType::Graphics,
                 ))?
                 .0 as u32,
             queue_count: 1,
