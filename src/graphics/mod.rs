@@ -22,7 +22,7 @@ impl Renderer {
         let instance = Instance::new(config)?;
         log::info!(
             "Instance was created! Vulkan API version is {}",
-            instance.version()
+            instance.version
         );
         let mut physical_devices: Vec<PhysicalDevice> = instance
             .enumerate_physical_devices()?

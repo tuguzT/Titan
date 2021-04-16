@@ -16,9 +16,9 @@ const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
-    version: Version,
-    layer_properties: Vec<vk::LayerProperties>,
-    extension_properties: Vec<vk::ExtensionProperties>,
+    pub version: Version,
+    pub layer_properties: Vec<vk::LayerProperties>,
+    pub extension_properties: Vec<vk::ExtensionProperties>,
     debug_utils: Option<DebugUtils>,
     instance_loader: ash::Instance,
     _entry_loader: ash::Entry,
@@ -128,27 +128,16 @@ impl Instance {
         })
     }
 
-    pub fn version(&self) -> &Version {
-        &self.version
-    }
-
-    pub fn layer_properties(&self) -> &Vec<vk::LayerProperties> {
-        &self.layer_properties
-    }
-
-    pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
-        &self.extension_properties
-    }
-
     pub fn loader(&self) -> &ash::Instance {
         &self.instance_loader
     }
 
     pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
-        unsafe { self.instance_loader.enumerate_physical_devices()? }
+        let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
+        Ok(handles
             .iter()
             .map(|handle| PhysicalDevice::new(self, *handle))
-            .collect()
+            .collect())
     }
 }
 

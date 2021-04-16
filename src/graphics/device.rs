@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::os::raw::c_char;
-use std::rc::Weak;
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
@@ -9,62 +8,47 @@ use ash::vk;
 use crate::graphics::instance::Instance;
 
 pub struct PhysicalDevice {
-    properties: vk::PhysicalDeviceProperties,
-    features: vk::PhysicalDeviceFeatures,
-    queue_family_properties: Vec<vk::QueueFamilyProperties>,
-    memory_properties: vk::PhysicalDeviceMemoryProperties,
-    handle: vk::PhysicalDevice,
-    instance_weak: Weak<Instance>,
+    pub properties: vk::PhysicalDeviceProperties,
+    pub features: vk::PhysicalDeviceFeatures,
+    pub queue_family_properties: Vec<vk::QueueFamilyProperties>,
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
+    pub handle: vk::PhysicalDevice,
+    _p_instance: *const Instance,
 }
 
 impl PhysicalDevice {
-    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Self {
         let properties = unsafe { instance.loader().get_physical_device_properties(handle) };
         let features = unsafe { instance.loader().get_physical_device_features(handle) };
-        let queue_family_properties = unsafe {
-            instance
-                .loader()
-                .get_physical_device_queue_family_properties(handle)
-        };
         let memory_properties = unsafe {
             instance
                 .loader()
                 .get_physical_device_memory_properties(handle)
         };
+        let queue_family_properties = unsafe {
+            instance
+                .loader()
+                .get_physical_device_queue_family_properties(handle)
+        };
 
-        let instance_weak = unsafe { Weak::from_raw(instance) };
-        Ok(Self {
+        Self {
             handle,
             properties,
             features,
             queue_family_properties,
             memory_properties,
-            instance_weak,
-        })
-    }
-
-    pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
-        &self.properties
-    }
-
-    pub fn features(&self) -> &vk::PhysicalDeviceFeatures {
-        &self.features
-    }
-
-    pub fn queue_family_properties(&self) -> &Vec<vk::QueueFamilyProperties> {
-        &self.queue_family_properties
-    }
-
-    pub fn memory_properties(&self) -> &vk::PhysicalDeviceMemoryProperties {
-        &self.memory_properties
+            _p_instance: instance,
+        }
     }
 
     pub fn instance(&self) -> &Instance {
-        unsafe { &*self.instance_weak.as_ptr() }
+        unsafe { &*self._p_instance }
     }
 
     pub fn is_suitable(&self) -> bool {
-        true
+        let graphics_queue_family_properties =
+            self.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
+        !graphics_queue_family_properties.is_empty()
     }
 
     pub fn score(&self) -> u32 {
@@ -75,6 +59,20 @@ impl PhysicalDevice {
         };
         score += self.properties.limits.max_image_dimension2_d;
         score
+    }
+
+    pub fn queue_family_properties_with(
+        &self,
+        flags: vk::QueueFlags,
+    ) -> Vec<&vk::QueueFamilyProperties> {
+        let mut vector = Vec::with_capacity(self.queue_family_properties.len());
+        for queue_family_property in &self.queue_family_properties {
+            let ref inner_flags = queue_family_property.queue_flags;
+            if inner_flags.contains(flags) {
+                vector.push(queue_family_property);
+            }
+        }
+        vector
     }
 }
 
@@ -99,9 +97,9 @@ impl Ord for PhysicalDevice {
 }
 
 pub struct Device {
-    extension_properties: Vec<vk::ExtensionProperties>,
+    pub extension_properties: Vec<vk::ExtensionProperties>,
     loader: ash::Device,
-    physical_device_weak: Weak<PhysicalDevice>,
+    _p_physical_device: *const PhysicalDevice,
 }
 
 impl Device {
@@ -157,16 +155,11 @@ impl Device {
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
-        let physical_device_weak = unsafe { Weak::from_raw(physical_device) };
         Ok(Self {
-            loader,
-            physical_device_weak,
             extension_properties,
+            loader,
+            _p_physical_device: physical_device,
         })
-    }
-
-    pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
-        &self.extension_properties
     }
 
     pub fn loader(&self) -> &ash::Device {
@@ -174,7 +167,7 @@ impl Device {
     }
 
     pub fn physical_device(&self) -> &PhysicalDevice {
-        unsafe { &*self.physical_device_weak.as_ptr() }
+        unsafe { &*self._p_physical_device }
     }
 }
 
