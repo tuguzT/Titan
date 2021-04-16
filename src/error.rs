@@ -1,12 +1,12 @@
 use std::fmt::{Debug, Display, Formatter, Result};
 
 pub struct Error {
-    pub message: String,
+    pub message: &'static str,
     pub r#type: ErrorType,
 }
 
 impl Error {
-    pub fn new(message: String, r#type: ErrorType) -> Self {
+    pub fn new(message: &'static str, r#type: ErrorType) -> Self {
         Self { message, r#type }
     }
 }

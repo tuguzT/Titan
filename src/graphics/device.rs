@@ -64,12 +64,12 @@ impl PhysicalDevice {
     pub fn queue_family_properties_with(
         &self,
         flags: vk::QueueFlags,
-    ) -> Vec<&vk::QueueFamilyProperties> {
+    ) -> Vec<(usize, &vk::QueueFamilyProperties)> {
         let mut vector = Vec::with_capacity(self.queue_family_properties.len());
-        for queue_family_property in &self.queue_family_properties {
+        for (index, queue_family_property) in self.queue_family_properties.iter().enumerate() {
             let ref inner_flags = queue_family_property.queue_flags;
             if inner_flags.contains(flags) {
-                vector.push(queue_family_property);
+                vector.push((index, queue_family_property));
             }
         }
         vector
@@ -143,7 +143,26 @@ impl Device {
         };
 
         let features = vk::PhysicalDeviceFeatures::default();
+
+        let graphics_queue_family_properties =
+            physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
+        let priorities = [1.0];
+        let queue_create_infos = vec![vk::DeviceQueueCreateInfo {
+            queue_family_index: graphics_queue_family_properties
+                .get(0)
+                .ok_or(crate::error::Error::new(
+                    "no queues with support of graphics",
+                    crate::error::ErrorType::Graphics,
+                ))?
+                .0 as u32,
+            queue_count: 1,
+            p_queue_priorities: priorities.as_ptr(),
+            ..Default::default()
+        }];
+
         let create_info = vk::DeviceCreateInfo {
+            queue_create_info_count: queue_create_infos.len() as u32,
+            p_queue_create_infos: queue_create_infos.as_ptr(),
             enabled_layer_count: p_layer_properties_names.len() as u32,
             pp_enabled_layer_names: p_layer_properties_names.as_ptr(),
             p_enabled_features: &features,

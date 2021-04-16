@@ -4,7 +4,6 @@ use device::{Device, PhysicalDevice};
 use instance::Instance;
 
 use crate::config::Config;
-use crate::error::ErrorType;
 
 mod debug;
 mod device;
@@ -12,7 +11,7 @@ mod instance;
 mod utils;
 
 pub struct Renderer {
-    devices: Vec<Device>,
+    device: Device,
     physical_devices: Vec<PhysicalDevice>,
     instance: Instance,
 }
@@ -31,18 +30,19 @@ impl Renderer {
             .collect();
         if physical_devices.is_empty() {
             return Err(Box::new(crate::error::Error::new(
-                "no suitable physical devices were found".to_string(),
-                ErrorType::Graphics,
+                "no suitable physical devices were found",
+                crate::error::ErrorType::Graphics,
             )));
         }
-        physical_devices.sort();
+        physical_devices.sort_unstable();
         physical_devices.reverse();
-        let devices = vec![Device::new(&instance, physical_devices.first().unwrap())?];
+        let best_physical_device = physical_devices.first().unwrap();
+        let device = Device::new(&instance, best_physical_device)?;
 
         Ok(Self {
             instance,
             physical_devices,
-            devices,
+            device,
         })
     }
 
