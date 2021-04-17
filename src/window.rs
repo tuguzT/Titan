@@ -1,10 +1,11 @@
 use std::error::Error;
 
+use winit::dpi::LogicalSize;
+use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use crate::config::Config;
-use winit::event::{Event, WindowEvent};
 
 pub struct Window {
     window: winit::window::Window,
@@ -18,8 +19,9 @@ impl Window {
             .with_title(format!(
                 "{} {}",
                 config.engine_name(),
-                config.engine_version()
+                config.engine_version(),
             ))
+            .with_min_inner_size(LogicalSize::new(250, 100))
             .with_visible(false)
             .build(&event_loop)?;
         Ok(Self { window, event_loop })

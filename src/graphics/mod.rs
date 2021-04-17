@@ -30,6 +30,10 @@ impl Renderer {
             .into_iter()
             .filter(|item| item.is_suitable())
             .collect();
+        log::info!(
+            "Enumerated {} suitable physical devices",
+            physical_devices.len()
+        );
         if physical_devices.is_empty() {
             return Err(Box::new(Error::new(
                 "no suitable physical devices were found",
