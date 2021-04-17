@@ -4,27 +4,33 @@ use device::{Device, PhysicalDevice};
 use instance::Instance;
 
 use crate::config::Config;
+use crate::graphics::surface::Surface;
+use crate::window::Window;
 
 mod debug;
 mod device;
 mod instance;
+mod surface;
 mod utils;
 
 pub struct Renderer {
     device: Device,
     physical_devices: Vec<PhysicalDevice>,
+    surface: Surface,
     instance: Instance,
 }
 
 impl Renderer {
-    pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
+    pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         use crate::error::{Error, ErrorType};
 
-        let instance = Instance::new(config)?;
+        let instance = Instance::new(config, &window.window)?;
         log::info!(
             "Instance was created! Vulkan API version is {}",
             instance.version
         );
+        let surface = Surface::new(&instance, &window.window)?;
+
         let mut physical_devices: Vec<PhysicalDevice> = instance
             .enumerate_physical_devices()?
             .into_iter()
@@ -47,6 +53,7 @@ impl Renderer {
 
         Ok(Self {
             instance,
+            surface,
             physical_devices,
             device,
         })

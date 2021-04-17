@@ -4,6 +4,8 @@ use std::os::raw::c_char;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
+use ash_window::enumerate_required_extensions;
+use raw_window_handle::HasRawWindowHandle;
 
 use crate::config::Config;
 use crate::graphics::debug::DebugUtils;
@@ -21,11 +23,14 @@ pub struct Instance {
     pub extension_properties: Vec<vk::ExtensionProperties>,
     debug_utils: Option<DebugUtils>,
     instance_loader: ash::Instance,
-    _entry_loader: ash::Entry,
+    entry_loader: ash::Entry,
 }
 
 impl Instance {
-    pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        config: &Config,
+        window_handle: &dyn HasRawWindowHandle,
+    ) -> Result<Self, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {
@@ -68,6 +73,10 @@ impl Instance {
                 enabled_extension_properties_names.push(DebugUtils::name());
             }
         }
+
+        // Push extensions' names for surface
+        let surface_extensions_names = enumerate_required_extensions(window_handle)?;
+        enabled_extension_properties_names.extend(surface_extensions_names.into_iter());
 
         // Initialize instance create info and get an instance
         let p_enabled_layer_properties_names: Vec<*const c_char> = enabled_layer_properties_names
@@ -119,13 +128,17 @@ impl Instance {
             .collect();
 
         Ok(Self {
-            _entry_loader: entry_loader,
+            entry_loader,
             instance_loader,
             version,
             layer_properties,
             extension_properties,
             debug_utils,
         })
+    }
+
+    pub fn entry_loader(&self) -> &ash::Entry {
+        &self.entry_loader
     }
 
     pub fn loader(&self) -> &ash::Instance {

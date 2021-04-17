@@ -3,12 +3,13 @@ use std::error::Error;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::platform::run_return::EventLoopExtRunReturn;
 use winit::window::WindowBuilder;
 
 use crate::config::Config;
 
 pub struct Window {
-    window: winit::window::Window,
+    pub window: winit::window::Window,
     event_loop: EventLoop<()>,
 }
 
@@ -27,10 +28,10 @@ impl Window {
         Ok(Self { window, event_loop })
     }
 
-    pub fn run(self) -> ! {
+    pub fn run(mut self) {
         self.window.set_visible(true);
         let window = self.window;
-        self.event_loop.run(move |event, _, control_flow| {
+        self.event_loop.run_return(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
             match event {
                 Event::WindowEvent {
