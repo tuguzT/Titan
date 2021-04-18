@@ -39,6 +39,10 @@ impl PhysicalDevice {
         }
     }
 
+    pub fn handle(&self) -> ash::vk::PhysicalDevice {
+        self.handle
+    }
+
     pub fn is_suitable(&self) -> bool {
         let graphics_queue_family_properties =
             self.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
@@ -55,15 +59,19 @@ impl PhysicalDevice {
         score
     }
 
+    pub fn queue_family_properties(&self) -> &Vec<vk::QueueFamilyProperties> {
+        &self.queue_family_properties
+    }
+
     pub fn queue_family_properties_with(
         &self,
         flags: vk::QueueFlags,
     ) -> Vec<(usize, &vk::QueueFamilyProperties)> {
         let mut vector = Vec::with_capacity(self.queue_family_properties.len());
-        for (index, queue_family_property) in self.queue_family_properties.iter().enumerate() {
-            let ref inner_flags = queue_family_property.queue_flags;
+        for (index, queue_family_properties) in self.queue_family_properties.iter().enumerate() {
+            let ref inner_flags = queue_family_properties.queue_flags;
             if inner_flags.contains(flags) {
-                vector.push((index, queue_family_property));
+                vector.push((index, queue_family_properties));
             }
         }
         vector

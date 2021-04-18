@@ -34,7 +34,12 @@ impl Renderer {
         let mut physical_devices: Vec<PhysicalDevice> = instance
             .enumerate_physical_devices()?
             .into_iter()
-            .filter(|item| item.is_suitable())
+            .filter(
+                |item| match surface.physical_device_queue_family_properties_support(item) {
+                    Ok(vector) => item.is_suitable() && !vector.is_empty(),
+                    Err(_) => false,
+                },
+            )
             .collect();
         log::info!(
             "Enumerated {} suitable physical devices",
