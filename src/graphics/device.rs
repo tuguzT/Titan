@@ -8,12 +8,11 @@ use ash::vk;
 use crate::graphics::instance::Instance;
 
 pub struct PhysicalDevice {
-    pub properties: vk::PhysicalDeviceProperties,
-    pub features: vk::PhysicalDeviceFeatures,
-    pub queue_family_properties: Vec<vk::QueueFamilyProperties>,
-    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub handle: vk::PhysicalDevice,
-    _p_instance: *const Instance,
+    properties: vk::PhysicalDeviceProperties,
+    features: vk::PhysicalDeviceFeatures,
+    queue_family_properties: Vec<vk::QueueFamilyProperties>,
+    memory_properties: vk::PhysicalDeviceMemoryProperties,
+    handle: vk::PhysicalDevice,
 }
 
 impl PhysicalDevice {
@@ -37,12 +36,7 @@ impl PhysicalDevice {
             features,
             queue_family_properties,
             memory_properties,
-            _p_instance: instance,
         }
-    }
-
-    pub fn instance(&self) -> &Instance {
-        unsafe { &*self._p_instance }
     }
 
     pub fn is_suitable(&self) -> bool {
@@ -97,9 +91,8 @@ impl Ord for PhysicalDevice {
 }
 
 pub struct Device {
-    pub extension_properties: Vec<vk::ExtensionProperties>,
+    extension_properties: Vec<vk::ExtensionProperties>,
     loader: ash::Device,
-    _p_physical_device: *const PhysicalDevice,
 }
 
 impl Device {
@@ -179,16 +172,11 @@ impl Device {
         Ok(Self {
             extension_properties,
             loader,
-            _p_physical_device: physical_device,
         })
     }
 
     pub fn loader(&self) -> &ash::Device {
         &self.loader
-    }
-
-    pub fn physical_device(&self) -> &PhysicalDevice {
-        unsafe { &*self._p_physical_device }
     }
 }
 

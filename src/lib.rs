@@ -14,7 +14,5 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let window = Window::new(&config)?;
     let renderer = Renderer::new(&config, &window)?;
 
-    renderer.render();
-    window.run();
-    Ok(())
+    window.run(renderer);
 }

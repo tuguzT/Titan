@@ -18,9 +18,9 @@ const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
-    pub version: Version,
-    pub layer_properties: Vec<vk::LayerProperties>,
-    pub extension_properties: Vec<vk::ExtensionProperties>,
+    version: Version,
+    layer_properties: Vec<vk::LayerProperties>,
+    extension_properties: Vec<vk::ExtensionProperties>,
     debug_utils: Option<DebugUtils>,
     instance_loader: ash::Instance,
     entry_loader: ash::Entry,
@@ -135,6 +135,10 @@ impl Instance {
             extension_properties,
             debug_utils,
         })
+    }
+
+    pub fn version(&self) -> &Version {
+        &self.version
     }
 
     pub fn entry_loader(&self) -> &ash::Entry {

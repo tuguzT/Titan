@@ -24,12 +24,12 @@ impl Renderer {
     pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         use crate::error::{Error, ErrorType};
 
-        let instance = Instance::new(config, &window.window)?;
+        let instance = Instance::new(config, window.window())?;
         log::info!(
             "Instance was created! Vulkan API version is {}",
-            instance.version
+            instance.version()
         );
-        let surface = Surface::new(&instance, &window.window)?;
+        let surface = Surface::new(&instance, window.window())?;
 
         let mut physical_devices: Vec<PhysicalDevice> = instance
             .enumerate_physical_devices()?
