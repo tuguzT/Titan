@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["tuguzT <timurka.tugushev@gmail.com>"]
 edition = "2018"
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 ash = "0.32.1"
 ash-window = "0.6.0"
@@ -11,3 +14,4 @@ raw-window-handle = "0.3.3"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 winit = "0.24.0"
+jni = "0.19.0"

@@ -47,8 +47,8 @@ impl Window {
                 Event::MainEventsCleared => renderer.render(),
                 Event::LoopDestroyed => {
                     unsafe { ManuallyDrop::drop(&mut renderer) };
-                    log::info!("Renderer was destroyed");
-                    log::info!("Closing this application...");
+                    log::info!("Renderer object was destroyed");
+                    log::info!("Closing this application");
                 }
                 _ => (),
             }

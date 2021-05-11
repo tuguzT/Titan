@@ -7,6 +7,7 @@ use window::Window;
 pub mod config;
 pub mod error;
 mod graphics;
+pub mod jni;
 pub mod version;
 mod window;
 
