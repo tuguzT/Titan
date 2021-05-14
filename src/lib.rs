@@ -7,9 +7,11 @@ use window::Window;
 pub mod config;
 pub mod error;
 mod graphics;
-mod jni;
 pub mod version;
 mod window;
+
+#[cfg(feature = "jni-export")]
+mod jni;
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let window = Window::new(&config)?;
