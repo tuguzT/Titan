@@ -1,36 +1,29 @@
 use crate::version::Version;
 
+#[derive(Debug)]
 pub struct Config {
-    app_name: &'static str,
-    app_version: Version,
-    engine_name: &'static str,
-    engine_version: Version,
+    name: String,
+    version: Version,
+}
+
+pub const ENGINE_NAME: &'static str = "titan";
+lazy_static! {
+    pub static ref ENGINE_VERSION: Version = Version::default();
 }
 
 impl Config {
-    pub fn new(app_name: &'static str, app_version: Version) -> Self {
-        let engine_name = "titan";
+    pub fn new(name: String, version: Version) -> Self {
         Self {
-            app_name,
-            app_version,
-            engine_name,
-            engine_version: Version::default(),
+            name,
+            version,
         }
     }
 
-    pub fn app_name(&self) -> &'static str {
-        self.app_name
+    pub fn name(&self) -> &String {
+        &self.name
     }
 
-    pub fn app_version(&self) -> &Version {
-        &self.app_version
-    }
-
-    pub fn engine_name(&self) -> &'static str {
-        self.engine_name
-    }
-
-    pub fn engine_version(&self) -> &Version {
-        &self.engine_version
+    pub fn version(&self) -> &Version {
+        &self.version
     }
 }

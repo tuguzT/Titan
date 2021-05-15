@@ -9,6 +9,6 @@ use titan_rs::version::Version;
 fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::try_init()?;
 
-    let config = Config::new("test_name", Version::default());
+    let config = Config::new("test-app".to_string(), Version::default());
     run(config)
 }

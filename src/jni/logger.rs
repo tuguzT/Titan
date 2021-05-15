@@ -15,24 +15,24 @@ fn handle_log(env: JNIEnv, message: JString, level: Level) {
 
 #[allow(non_snake_case)]
 #[no_mangle]
-extern "system" fn Java_native_Logger_error(env: JNIEnv, _class: JClass, message: JString) {
+extern "system" fn Java_com_tuguzT_native_Logger_error(env: JNIEnv, _class: JClass, message: JString) {
     handle_log(env, message, Level::Error)
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-extern "system" fn Java_native_Logger_warn(env: JNIEnv, _class: JClass, message: JString) {
+extern "system" fn Java_com_tuguzT_native_Logger_warn(env: JNIEnv, _class: JClass, message: JString) {
     handle_log(env, message, Level::Warn)
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-extern "system" fn Java_native_Logger_info(env: JNIEnv, _class: JClass, message: JString) {
+extern "system" fn Java_com_tuguzT_native_Logger_info(env: JNIEnv, _class: JClass, message: JString) {
     handle_log(env, message, Level::Info)
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-extern "system" fn Java_native_Logger_debug(env: JNIEnv, _class: JClass, message: JString) {
+extern "system" fn Java_com_tuguzT_native_Logger_debug(env: JNIEnv, _class: JClass, message: JString) {
     handle_log(env, message, Level::Debug)
 }

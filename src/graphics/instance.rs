@@ -7,7 +7,7 @@ use ash::vk;
 use ash_window::enumerate_required_extensions;
 use raw_window_handle::HasRawWindowHandle;
 
-use crate::config::Config;
+use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
 use crate::graphics::debug::DebugUtils;
 use crate::graphics::device::PhysicalDevice;
 use crate::graphics::utils;
@@ -44,11 +44,11 @@ impl Instance {
             entry_loader.enumerate_instance_extension_properties()?;
 
         // Setup application info for Vulkan API
-        let application_name = CString::new(config.app_name())?;
-        let engine_name = CString::new(config.engine_name())?;
+        let application_name = CString::new(config.name().as_str())?;
+        let engine_name = CString::new(ENGINE_NAME)?;
         let application_info = vk::ApplicationInfo {
-            application_version: utils::to_vk_version(&config.app_version()),
-            engine_version: utils::to_vk_version(&config.engine_version()),
+            application_version: utils::to_vk_version(&config.version()),
+            engine_version: utils::to_vk_version(&ENGINE_VERSION),
             p_application_name: application_name.as_ptr(),
             p_engine_name: engine_name.as_ptr(),
             api_version: vk::API_VERSION_1_2,

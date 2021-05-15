@@ -18,11 +18,7 @@ impl Window {
     pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new()
-            .with_title(format!(
-                "{} {}",
-                config.engine_name(),
-                config.engine_version(),
-            ))
+            .with_title(format!("{} version {}", config.name(), config.version()))
             .with_min_inner_size(LogicalSize::new(250, 100))
             .with_visible(false)
             .build(&event_loop)?;
