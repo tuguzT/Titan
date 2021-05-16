@@ -44,7 +44,7 @@ impl Instance {
             entry_loader.enumerate_instance_extension_properties()?;
 
         // Setup application info for Vulkan API
-        let application_name = CString::new(config.name().as_str())?;
+        let application_name = CString::new(config.name())?;
         let engine_name = CString::new(ENGINE_NAME)?;
         let application_info = vk::ApplicationInfo {
             application_version: utils::to_vk_version(&config.version()),

@@ -27,5 +27,6 @@ pub fn from_vk_version(version: u32) -> Version {
         vk::version_major(version),
         vk::version_minor(version),
         vk::version_patch(version),
+        "".to_string()
     )
 }
