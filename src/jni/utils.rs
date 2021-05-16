@@ -7,7 +7,7 @@ use crate::version::Version;
 
 pub fn get_config(env: JNIEnv, config: JObject) -> Result<Config, Error> {
     let name_obj = env.get_field(config, "name", "Ljava/lang/String;")?.l()?;
-    let name: String = env.get_string(name_obj.into())?.into();
+    let name = env.get_string(name_obj.into())?.into();
 
     let version_obj = env.get_field(config, "version", "Lcom/tuguzT/Version;")?.l()?;
     let version = get_version(env, version_obj)?;
@@ -19,5 +19,7 @@ pub fn get_version(env: JNIEnv, version: JObject) -> Result<Version, Error> {
     let major = env.get_field(version, "major", "I")?.i()? as u32;
     let minor = env.get_field(version, "minor", "I")?.i()? as u32;
     let patch = env.get_field(version, "patch", "I")?.i()? as u32;
-    Ok(Version::new(major, minor, patch))
+    let postfix = env.get_field(version, "postfix", "Ljava/lang/String;")?.l()?;
+    let postfix = env.get_string(postfix.into())?.into();
+    Ok(Version::new(major, minor, patch, postfix))
 }

@@ -11,13 +11,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::try_init()?;
 
     let config_bytes = include_bytes!("../res/config.json");
-    let json: serde_json::Value = serde_json::from_slice(config_bytes)?;
+    let config = parse_config(config_bytes)?;
+    run(config)
+}
+
+fn parse_config(bytes: &[u8]) -> Result<Config, Box<dyn Error>> {
+    let json: serde_json::Value = serde_json::from_slice(bytes)?;
+
     let name = json["name"].as_str()
         .expect(r#"config.json must contain "name" string"#);
     let version = json["version"].as_str()
         .expect(r#"config.json must contain "version" semver string"#);
     let version = Version::from_str(version)?;
 
-    let config = Config::new(name.to_string(), version);
-    run(config)
+    Ok(Config::new(name.to_string(), version))
 }

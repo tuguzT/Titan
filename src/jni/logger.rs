@@ -1,15 +1,16 @@
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use log::Level;
+use crate::config::ENGINE_NAME;
 
 fn handle_log(env: JNIEnv, message: JString, level: Level) {
     let message = env.get_string(message);
     match message {
         Ok(message) => {
             let message: String = message.into();
-            log::log!(target: "titan-rs", level, "{}", message);
+            log::log!(target: ENGINE_NAME, level, "{}", message);
         }
-        Err(err) => log::error!(target: "titan-rs", "{:?}", err)
+        Err(err) => log::error!(target: ENGINE_NAME, "{:?}", err)
     }
 }
 
