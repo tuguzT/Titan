@@ -1,6 +1,7 @@
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use log::Level;
+
 use crate::config::ENGINE_NAME;
 
 fn handle_log(env: JNIEnv, message: JString, level: Level) {

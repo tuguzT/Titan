@@ -8,10 +8,10 @@ use ash_window::enumerate_required_extensions;
 use raw_window_handle::HasRawWindowHandle;
 
 use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
+use crate::config::version::Version;
 use crate::graphics::debug::DebugUtils;
 use crate::graphics::device::PhysicalDevice;
 use crate::graphics::utils;
-use crate::version::Version;
 
 const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS_validation");
 

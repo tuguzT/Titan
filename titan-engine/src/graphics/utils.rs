@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::version::Version;
+use crate::config::version::Version;
 
 #[macro_export]
 macro_rules! c_str {

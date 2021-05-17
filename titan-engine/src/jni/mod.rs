@@ -4,8 +4,8 @@ use jni::{JavaVM, JNIEnv};
 use jni::objects::{JClass, JObject};
 use jni::sys::{jint, JNI_ERR, JNI_VERSION_1_6};
 
-use crate::jni::utils::get_config;
 use crate::config::ENGINE_NAME;
+use crate::jni::utils::get_config;
 
 mod logger;
 mod window;

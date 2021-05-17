@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::JObject;
 
 use crate::config::Config;
-use crate::version::Version;
+use crate::config::version::Version;
 
 pub fn get_config(env: JNIEnv, config: JObject) -> Result<Config, Error> {
     let name_obj = env.get_field(config, "name", "Ljava/lang/String;")?.l()?;

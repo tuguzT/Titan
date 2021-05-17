@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter, Result};
+use std::fmt::{Display, Formatter, Result, Debug};
 use std::str::FromStr;
 
 use regex::Regex;
@@ -9,7 +9,7 @@ r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)",
 r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))",
 r"?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$",
 );
-lazy_static! {
+lazy_static::lazy_static! {
     static ref SEMVER_REGEX: Regex = Regex::new(SEMVER_PATTERN).unwrap();
     static ref INT_REGEX: Regex = Regex::new(r"\d+").unwrap();
 }

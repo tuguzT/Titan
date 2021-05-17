@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 use std::error::Error;
 
 use config::Config;
@@ -10,7 +7,6 @@ use window::Window;
 pub mod config;
 pub mod error;
 mod graphics;
-pub mod version;
 mod window;
 
 #[cfg(feature = "jni-export")]
