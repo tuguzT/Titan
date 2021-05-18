@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 titan-engine = { path = "titan-engine" }
+log = "0.4.14"
 pretty_env_logger = "0.4.0"
