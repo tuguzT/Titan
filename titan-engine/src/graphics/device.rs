@@ -135,7 +135,7 @@ impl Device {
             vector
         };
         let p_layer_properties_names: Vec<*const c_char> = layer_properties
-            .into_iter()
+            .iter()
             .map(|layer_property| layer_property.layer_name.as_ptr())
             .collect();
 
