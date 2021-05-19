@@ -3,7 +3,9 @@ pub trait Callback<T>
 {
     fn new() -> T;
 
-    fn on_create(&self);
+    fn created(&self);
 
-    fn on_destroy(&self);
+    fn resized(&self, width: u32, height: u32);
+
+    fn destroyed(&self);
 }

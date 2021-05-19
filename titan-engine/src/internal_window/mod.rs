@@ -2,7 +2,7 @@ use std::error::Error;
 use std::mem::ManuallyDrop;
 
 use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent, StartCause};
+use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
@@ -41,17 +41,17 @@ impl Window {
             *control_flow = ControlFlow::Poll;
             match event {
                 Event::NewEvents(cause) => match cause {
-                    StartCause::Poll => {}
-                    StartCause::Init => event_handler.on_create(),
+                    StartCause::Init => event_handler.created(),
                     _ => (),
                 }
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    window_id,
-                } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+                Event::WindowEvent { event, window_id } if window_id == window.id() => match event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(size) => event_handler.resized(size.width, size.height),
+                    _ => (),
+                }
                 Event::MainEventsCleared => renderer.render(),
                 Event::LoopDestroyed => {
-                    event_handler.on_destroy();
+                    event_handler.destroyed();
                     unsafe { ManuallyDrop::drop(&mut renderer) };
                     log::info!("Closing this application");
                 }
