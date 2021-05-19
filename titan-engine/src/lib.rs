@@ -2,15 +2,15 @@ use std::error::Error;
 
 use config::Config;
 use graphics::Renderer;
-use internal_window::Window;
-use crate::window::Callback;
+use impl_window::Window;
+use window::Callback;
 
 pub mod config;
 pub mod error;
 pub mod window;
 
 mod graphics;
-mod internal_window;
+mod impl_window;
 
 #[cfg(feature = "jni-export")]
 mod jni;

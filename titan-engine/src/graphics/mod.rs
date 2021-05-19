@@ -5,7 +5,7 @@ use instance::Instance;
 
 use crate::config::Config;
 use crate::graphics::surface::Surface;
-use crate::internal_window::Window;
+use crate::impl_window::Window;
 
 mod debug;
 mod device;

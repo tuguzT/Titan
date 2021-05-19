@@ -5,11 +5,10 @@ use std::str::FromStr;
 
 use pretty_env_logger as logger;
 
+use event_handler::EventHandler;
 use titan_engine::config::Config;
 use titan_engine::config::version::Version;
 use titan_engine::run;
-
-use crate::event_handler::EventHandler;
 
 mod event_handler;
 
