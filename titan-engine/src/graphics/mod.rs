@@ -22,7 +22,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
-        use crate::error::{Error, ErrorType};
+        use super::error::{Error, ErrorType};
 
         let instance = Instance::new(config, window.window())?;
         log::info!(
@@ -45,16 +45,12 @@ impl Renderer {
             "Enumerated {} suitable physical devices",
             physical_devices.len()
         );
-        if physical_devices.is_empty() {
-            return Err(Error::new(
-                "no suitable physical devices were found",
-                ErrorType::Graphics,
-            )
-            .into());
-        }
         physical_devices.sort_unstable();
         physical_devices.reverse();
-        let best_physical_device = physical_devices.first().unwrap();
+        let best_physical_device = physical_devices.first().ok_or(Error::new(
+            "no suitable physical devices were found",
+            ErrorType::Graphics,
+        ))?;
         let device = Device::new(&instance, best_physical_device)?;
 
         Ok(Self {
@@ -66,6 +62,6 @@ impl Renderer {
     }
 
     pub fn render(&self) {
-        log::debug!("Rendering a frame!");
+        log::trace!("Rendering a frame!");
     }
 }

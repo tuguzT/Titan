@@ -120,7 +120,9 @@ unsafe fn enumerate_device_layer_properties(
 }
 
 pub struct Device {
+    layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
+    queues: Vec<Queue>,
     loader: ash::Device,
 }
 
@@ -147,7 +149,7 @@ impl Device {
 
         let graphics_queue_family_properties =
             physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
-        let priorities = vec![1.0];
+        let priorities = [1.0];
         let queue_family_index = graphics_queue_family_properties
             .get(0)
             .ok_or(Error::new(
@@ -157,9 +159,9 @@ impl Device {
             .0 as u32;
         let device_queue_create_info = vk::DeviceQueueCreateInfo::builder()
             .queue_family_index(queue_family_index)
-            .queue_priorities(priorities.as_slice());
+            .queue_priorities(&priorities);
         let queue_create_infos = vec![*device_queue_create_info];
-        let features = vk::PhysicalDeviceFeatures::default();
+        let features = vk::PhysicalDeviceFeatures::builder();
 
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(queue_create_infos.as_slice())
@@ -170,9 +172,18 @@ impl Device {
                 .loader()
                 .create_device(physical_device.handle, &create_info, None)?
         };
+        let mut queues = Vec::new();
+        for create_info in queue_create_infos.iter() {
+            let range = 0..create_info.queue_count;
+            queues.extend(range.map(|index| unsafe {
+                Queue::new(&loader, create_info.queue_family_index, index)
+            }));
+        }
 
         Ok(Self {
+            layer_properties,
             extension_properties,
+            queues,
             loader,
         })
     }
@@ -180,10 +191,29 @@ impl Device {
     pub fn loader(&self) -> &ash::Device {
         &self.loader
     }
+
+    pub fn queues(&self) -> &Vec<Queue> {
+        &self.queues
+    }
 }
 
 impl Drop for Device {
     fn drop(&mut self) {
         unsafe { self.loader.destroy_device(None) };
+    }
+}
+
+pub struct Queue {
+    family_index: u32,
+    handle: vk::Queue,
+}
+
+impl Queue {
+    unsafe fn new(device: &ash::Device, family_index: u32, index: u32) -> Self {
+        let handle = device.get_device_queue(family_index, index);
+        Self {
+            family_index,
+            handle,
+        }
     }
 }
