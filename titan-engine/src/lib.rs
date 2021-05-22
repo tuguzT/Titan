@@ -16,7 +16,8 @@ mod impl_window;
 mod jni;
 
 pub fn run<T>(config: Config) -> Result<(), Box<dyn Error>>
-    where T: Callback<T> + 'static
+where
+    T: Callback<T> + 'static,
 {
     let window = Window::new(&config)?;
     let renderer = Renderer::new(&config, &window)?;

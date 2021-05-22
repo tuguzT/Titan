@@ -4,12 +4,14 @@ use ash::vk;
 use ash_window::create_surface;
 use raw_window_handle::HasRawWindowHandle;
 
-use crate::graphics::device::PhysicalDevice;
-use crate::graphics::instance::Instance;
+use super::Instance;
+use super::PhysicalDevice;
+
+type SurfaceLoader = ash::extensions::khr::Surface;
 
 pub struct Surface {
     surface: vk::SurfaceKHR,
-    loader: ash::extensions::khr::Surface,
+    loader: SurfaceLoader,
 }
 
 impl Surface {
@@ -17,9 +19,7 @@ impl Surface {
         instance: &Instance,
         window_handle: &dyn HasRawWindowHandle,
     ) -> Result<Self, Box<dyn Error>> {
-        use ash::extensions::khr::Surface;
-
-        let loader = Surface::new(instance.entry_loader(), instance.loader());
+        let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
         let surface = unsafe {
             create_surface(
                 instance.entry_loader(),

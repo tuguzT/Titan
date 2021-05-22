@@ -1,5 +1,6 @@
 pub trait Callback<T>
-    where T: Callback<T>
+where
+    T: Callback<T>,
 {
     fn new() -> T;
 

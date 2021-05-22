@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::config::version::Version;
+use crate::config::Version;
 
 #[macro_export]
 macro_rules! c_str {
@@ -27,6 +27,6 @@ pub fn from_vk_version(version: u32) -> Version {
         vk::version_major(version),
         vk::version_minor(version),
         vk::version_patch(version),
-        "".to_string()
+        "".to_string(),
     )
 }

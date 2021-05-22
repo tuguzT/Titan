@@ -7,7 +7,7 @@ use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
-use crate::graphics::instance::Instance;
+use super::Instance;
 
 pub struct PhysicalDevice {
     properties: vk::PhysicalDeviceProperties,
@@ -105,13 +105,16 @@ unsafe fn enumerate_device_layer_properties(
     physical_device: vk::PhysicalDevice,
 ) -> VkResult<Vec<vk::LayerProperties>> {
     let mut count = 0;
-    instance.fp_v1_0()
+    instance
+        .fp_v1_0()
         .enumerate_device_layer_properties(physical_device, &mut count, std::ptr::null_mut())
         .result()?;
     let mut data = Vec::with_capacity(count as usize);
-    let err_code = instance
-        .fp_v1_0()
-        .enumerate_device_layer_properties(physical_device, &mut count, data.as_mut_ptr());
+    let err_code = instance.fp_v1_0().enumerate_device_layer_properties(
+        physical_device,
+        &mut count,
+        data.as_mut_ptr(),
+    );
     data.set_len(count as usize);
     err_code.result_with_success(data)
 }

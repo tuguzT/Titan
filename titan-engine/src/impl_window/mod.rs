@@ -6,9 +6,9 @@ use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
-use crate::config::Config;
-use crate::graphics::Renderer;
-use crate::window::Callback;
+use super::config::Config;
+use super::graphics::Renderer;
+use super::window::Callback;
 
 pub struct Window {
     window: winit::window::Window,
@@ -31,7 +31,8 @@ impl Window {
     }
 
     pub fn run<T>(self, renderer: Renderer) -> !
-        where T: Callback<T> + 'static
+    where
+        T: Callback<T> + 'static,
     {
         self.window.set_visible(true);
         let window = self.window;
@@ -43,11 +44,15 @@ impl Window {
                 Event::NewEvents(cause) => match cause {
                     StartCause::Init => event_handler.created(),
                     _ => (),
-                }
-                Event::WindowEvent { event, window_id } if window_id == window.id() => match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(size) => event_handler.resized(size.width, size.height),
-                    _ => (),
+                },
+                Event::WindowEvent { event, window_id } if window_id == window.id() => {
+                    match event {
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                        WindowEvent::Resized(size) => {
+                            event_handler.resized(size.width, size.height)
+                        }
+                        _ => (),
+                    }
                 }
                 Event::MainEventsCleared => renderer.render(),
                 Event::LoopDestroyed => {

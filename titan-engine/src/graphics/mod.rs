@@ -2,10 +2,10 @@ use std::error::Error;
 
 use device::{Device, PhysicalDevice};
 use instance::Instance;
+use surface::Surface;
 
-use crate::config::Config;
-use crate::graphics::surface::Surface;
-use crate::impl_window::Window;
+use super::config::Config;
+use super::impl_window::Window;
 
 mod debug;
 mod device;
@@ -49,7 +49,8 @@ impl Renderer {
             return Err(Error::new(
                 "no suitable physical devices were found",
                 ErrorType::Graphics,
-            ).into());
+            )
+            .into());
         }
         physical_devices.sort_unstable();
         physical_devices.reverse();

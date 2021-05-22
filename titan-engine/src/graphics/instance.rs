@@ -8,11 +8,11 @@ use ash::vk;
 use ash_window::enumerate_required_extensions;
 use raw_window_handle::HasRawWindowHandle;
 
-use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
-use crate::config::version::Version;
-use crate::graphics::debug::DebugUtils;
-use crate::graphics::device::PhysicalDevice;
-use crate::graphics::utils;
+use crate::config::{Config, Version, ENGINE_NAME, ENGINE_VERSION};
+
+use super::debug::DebugUtils;
+use super::device::PhysicalDevice;
+use super::utils;
 
 const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS_validation");
 
@@ -95,22 +95,20 @@ impl Instance {
         let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
 
         // Initialize debug utils extension
-        let debug_utils = if ENABLE_VALIDATION
-            && enabled_extension_names.contains(&DebugUtils::name())
-        {
-            let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
-            log::info!("Vulkan validation layer enabled");
-            Some(returnable)
-        } else {
-            None
-        };
+        let debug_utils =
+            if ENABLE_VALIDATION && enabled_extension_names.contains(&DebugUtils::name()) {
+                let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
+                log::info!("Vulkan validation layer enabled");
+                Some(returnable)
+            } else {
+                None
+            };
 
         // Enumerate enabled layers
         let layer_properties = available_layer_properties
             .into_iter()
             .filter(|item| {
-                enabled_layer_names
-                    .contains(&unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
+                enabled_layer_names.contains(&unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
             })
             .collect();
 
@@ -157,6 +155,8 @@ impl Instance {
 impl Drop for Instance {
     fn drop(&mut self) {
         self.debug_utils = None;
-        unsafe { self.instance_loader.destroy_instance(None); }
+        unsafe {
+            self.instance_loader.destroy_instance(None);
+        }
     }
 }

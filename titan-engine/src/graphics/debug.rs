@@ -35,7 +35,8 @@ impl DebugUtils {
 impl Drop for DebugUtils {
     fn drop(&mut self) {
         unsafe {
-            self.loader.destroy_debug_utils_messenger(self.messenger, None)
+            self.loader
+                .destroy_debug_utils_messenger(self.messenger, None)
         }
     }
 }
@@ -67,10 +68,17 @@ unsafe extern "system" fn callback(
             vk::DebugUtilsMessageSeverityFlagsEXT::INFO => Level::Info,
             vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => Level::Warn,
             vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => Level::Error,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
-        log::log!(level, "{:?}:{:?} [{} ({})] : {}",
-                  message_severity, message_type, message_id_name, message_id_number, message);
+        log::log!(
+            level,
+            "{:?}:{:?} [{} ({})] : {}",
+            message_severity,
+            message_type,
+            message_id_name,
+            message_id_number,
+            message
+        );
     }
     vk::FALSE
 }

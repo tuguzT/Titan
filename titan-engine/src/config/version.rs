@@ -1,13 +1,13 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter, Result, Debug};
+use std::fmt::{Debug, Display, Formatter, Result};
 use std::str::FromStr;
 
 use regex::Regex;
 
 const SEMVER_PATTERN: &'static str = concat!(
-r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)",
-r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))",
-r"?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$",
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)",
+    r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))",
+    r"?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$",
 );
 lazy_static::lazy_static! {
     static ref SEMVER_REGEX: Regex = Regex::new(SEMVER_PATTERN).unwrap();
@@ -41,11 +41,13 @@ impl FromStr for Version {
             return Err("Given string is not a semver".into());
         }
         let mut end: usize = 0;
-        let numbers: Vec<u32> = INT_REGEX.find_iter(s)
+        let numbers: Vec<u32> = INT_REGEX
+            .find_iter(s)
             .filter_map(|int| {
                 end = int.end();
                 int.as_str().parse().ok()
-            }).collect();
+            })
+            .collect();
         Ok(Version {
             major: numbers[0],
             minor: numbers[1],
@@ -57,7 +59,11 @@ impl FromStr for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}.{}.{}{}", self.major, self.minor, self.patch, self.postfix)
+        write!(
+            f,
+            "{}.{}.{}{}",
+            self.major, self.minor, self.patch, self.postfix,
+        )
     }
 }
 
