@@ -5,6 +5,7 @@ use std::os::raw::c_void;
 
 use ash::extensions::ext;
 use ash::vk;
+use log::Level;
 
 pub struct DebugUtils {
     loader: ext::DebugUtils,
@@ -16,12 +17,10 @@ impl DebugUtils {
         entry_loader: &ash::Entry,
         instance_loader: &ash::Instance,
     ) -> Result<Self, Box<dyn Error>> {
-        let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
-            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::all(),
-            message_type: vk::DebugUtilsMessageTypeFlagsEXT::all(),
-            pfn_user_callback: Some(callback),
-            ..Default::default()
-        };
+        let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
+            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+            .pfn_user_callback(Some(callback));
         let loader = ext::DebugUtils::new(entry_loader, instance_loader);
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
@@ -36,8 +35,7 @@ impl DebugUtils {
 impl Drop for DebugUtils {
     fn drop(&mut self) {
         unsafe {
-            self.loader
-                .destroy_debug_utils_messenger(self.messenger, None)
+            self.loader.destroy_debug_utils_messenger(self.messenger, None)
         }
     }
 }
@@ -64,24 +62,15 @@ unsafe extern "system" fn callback(
             CStr::from_ptr(callback_data.p_message).to_string_lossy()
         };
 
-        let formatted = format!(
-            "{:?}:{:?} [{} ({})] : {}",
-            message_severity, message_type, message_id_name, message_id_number, message,
-        );
-        match message_severity {
-            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-                log::trace!("{}", formatted)
-            }
-            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-                log::info!("{}", formatted)
-            }
-            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-                log::warn!("{}", formatted)
-            }
-            _ => {
-                log::error!("{}", formatted)
-            }
-        }
+        let level = match message_severity {
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => Level::Trace,
+            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => Level::Info,
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => Level::Warn,
+            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => Level::Error,
+            _ => unreachable!()
+        };
+        log::log!(level, "{:?}:{:?} [{} ({})] : {}",
+                  message_severity, message_type, message_id_name, message_id_number, message);
     }
     vk::FALSE
 }

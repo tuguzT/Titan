@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 use std::error::Error;
+use std::ops::Deref;
 use std::os::raw::c_char;
 
+use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -98,6 +100,22 @@ impl Ord for PhysicalDevice {
     }
 }
 
+unsafe fn enumerate_device_layer_properties(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+) -> VkResult<Vec<vk::LayerProperties>> {
+    let mut count = 0;
+    instance.fp_v1_0()
+        .enumerate_device_layer_properties(physical_device, &mut count, std::ptr::null_mut())
+        .result()?;
+    let mut data = Vec::with_capacity(count as usize);
+    let err_code = instance
+        .fp_v1_0()
+        .enumerate_device_layer_properties(physical_device, &mut count, data.as_mut_ptr());
+    data.set_len(count as usize);
+    err_code.result_with_success(data)
+}
+
 pub struct Device {
     extension_properties: Vec<vk::ExtensionProperties>,
     loader: ash::Device,
@@ -111,29 +129,8 @@ impl Device {
         use crate::error::{Error, ErrorType};
 
         let layer_properties = unsafe {
-            let mut count = 0;
-            instance
-                .loader()
-                .fp_v1_0()
-                .enumerate_device_layer_properties(
-                    physical_device.handle,
-                    &mut count,
-                    std::ptr::null_mut(),
-                )
-                .result()?;
-            let mut vector = Vec::with_capacity(count as usize);
-            instance
-                .loader()
-                .fp_v1_0()
-                .enumerate_device_layer_properties(
-                    physical_device.handle,
-                    &mut count,
-                    vector.as_mut_ptr(),
-                )
-                .result()?;
-            vector.set_len(count as usize);
-            vector
-        };
+            enumerate_device_layer_properties(instance.loader(), physical_device.handle)
+        }?;
         let p_layer_properties_names: Vec<*const c_char> = layer_properties
             .iter()
             .map(|layer_property| layer_property.layer_name.as_ptr())
@@ -145,32 +142,26 @@ impl Device {
                 .enumerate_device_extension_properties(physical_device.handle)?
         };
 
-        let features = vk::PhysicalDeviceFeatures::default();
-
         let graphics_queue_family_properties =
             physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
-        let priorities = [1.0];
-        let queue_create_infos = vec![vk::DeviceQueueCreateInfo {
-            queue_family_index: graphics_queue_family_properties
-                .get(0)
-                .ok_or(Error::new(
-                    "no queues with support of graphics",
-                    ErrorType::Graphics,
-                ))?
-                .0 as u32,
-            queue_count: 1,
-            p_queue_priorities: priorities.as_ptr(),
-            ..Default::default()
-        }];
+        let priorities = vec![1.0];
+        let queue_family_index = graphics_queue_family_properties
+            .get(0)
+            .ok_or(Error::new(
+                "no queues with support of graphics",
+                ErrorType::Graphics,
+            ))?
+            .0 as u32;
+        let device_queue_create_info = vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(queue_family_index)
+            .queue_priorities(priorities.as_slice());
+        let queue_create_infos = vec![*device_queue_create_info];
+        let features = vk::PhysicalDeviceFeatures::default();
 
-        let create_info = vk::DeviceCreateInfo {
-            queue_create_info_count: queue_create_infos.len() as u32,
-            p_queue_create_infos: queue_create_infos.as_ptr(),
-            enabled_layer_count: p_layer_properties_names.len() as u32,
-            pp_enabled_layer_names: p_layer_properties_names.as_ptr(),
-            p_enabled_features: &features,
-            ..Default::default()
-        };
+        let create_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(queue_create_infos.as_slice())
+            .enabled_layer_names(p_layer_properties_names.deref())
+            .enabled_features(&features);
         let loader = unsafe {
             instance
                 .loader()

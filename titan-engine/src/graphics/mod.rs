@@ -46,10 +46,10 @@ impl Renderer {
             physical_devices.len()
         );
         if physical_devices.is_empty() {
-            return Err(Box::new(Error::new(
+            return Err(Error::new(
                 "no suitable physical devices were found",
                 ErrorType::Graphics,
-            )));
+            ).into());
         }
         physical_devices.sort_unstable();
         physical_devices.reverse();

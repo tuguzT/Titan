@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::ffi::{CStr, CString};
+use std::ops::Deref;
 use std::os::raw::c_char;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
@@ -46,14 +47,14 @@ impl Instance {
         // Setup application info for Vulkan API
         let application_name = CString::new(config.name())?;
         let engine_name = CString::new(ENGINE_NAME)?;
-        let application_info = vk::ApplicationInfo {
-            application_version: utils::to_vk_version(&config.version()),
-            engine_version: utils::to_vk_version(&ENGINE_VERSION),
-            p_application_name: application_name.as_ptr(),
-            p_engine_name: engine_name.as_ptr(),
-            api_version: vk::API_VERSION_1_2,
-            ..Default::default()
-        };
+        let application_version = utils::to_vk_version(&config.version());
+        let engine_version = utils::to_vk_version(&ENGINE_VERSION);
+        let application_info = vk::ApplicationInfo::builder()
+            .application_version(application_version)
+            .engine_version(engine_version)
+            .application_name(application_name.deref())
+            .engine_name(engine_name.deref())
+            .api_version(vk::API_VERSION_1_2);
 
         // Initialize containers for layers' and extensions' names
         let _available_layer_properties_names = available_layer_properties
@@ -62,45 +63,40 @@ impl Instance {
         let mut available_extension_properties_names = available_extension_properties
             .iter()
             .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) });
-        let mut enabled_layer_properties_names: Vec<&CStr> = Vec::new();
-        let mut enabled_extension_properties_names: Vec<&CStr> = Vec::new();
+        let mut enabled_layer_names = Vec::new();
+        let mut enabled_extension_names = Vec::new();
 
         // Push names' pointers into containers if validation was enabled
         let validation_layer_name = unsafe { CStr::from_ptr(VALIDATION_LAYER_NAME) };
         if ENABLE_VALIDATION {
-            enabled_layer_properties_names.push(validation_layer_name);
+            enabled_layer_names.push(validation_layer_name);
             if available_extension_properties_names.any(|item| item == DebugUtils::name()) {
-                enabled_extension_properties_names.push(DebugUtils::name());
+                enabled_extension_names.push(DebugUtils::name());
             }
         }
 
         // Push extensions' names for surface
         let surface_extensions_names = enumerate_required_extensions(window_handle)?;
-        enabled_extension_properties_names.extend(surface_extensions_names.into_iter());
+        enabled_extension_names.extend(surface_extensions_names.into_iter());
 
         // Initialize instance create info and get an instance
-        let p_enabled_layer_properties_names: Vec<*const c_char> = enabled_layer_properties_names
+        let p_enabled_layer_names: Vec<*const c_char> = enabled_layer_names
             .iter()
             .map(|item| item.as_ptr())
             .collect();
-        let p_enabled_extension_properties_names: Vec<*const c_char> =
-            enabled_extension_properties_names
-                .iter()
-                .map(|item| item.as_ptr())
-                .collect();
-        let create_info = vk::InstanceCreateInfo {
-            p_application_info: &application_info,
-            enabled_layer_count: p_enabled_layer_properties_names.len() as u32,
-            pp_enabled_layer_names: p_enabled_layer_properties_names.as_ptr(),
-            enabled_extension_count: p_enabled_extension_properties_names.len() as u32,
-            pp_enabled_extension_names: p_enabled_extension_properties_names.as_ptr(),
-            ..Default::default()
-        };
+        let p_enabled_extension_names: Vec<*const c_char> = enabled_extension_names
+            .iter()
+            .map(|item| item.as_ptr())
+            .collect();
+        let create_info = vk::InstanceCreateInfo::builder()
+            .application_info(application_info.deref())
+            .enabled_layer_names(p_enabled_layer_names.as_slice())
+            .enabled_extension_names(p_enabled_extension_names.as_slice());
         let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
 
         // Initialize debug utils extension
         let debug_utils = if ENABLE_VALIDATION
-            && enabled_extension_properties_names.contains(&DebugUtils::name())
+            && enabled_extension_names.contains(&DebugUtils::name())
         {
             let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
             log::info!("Vulkan validation layer enabled");
@@ -113,7 +109,7 @@ impl Instance {
         let layer_properties = available_layer_properties
             .into_iter()
             .filter(|item| {
-                enabled_layer_properties_names
+                enabled_layer_names
                     .contains(&unsafe { CStr::from_ptr(item.layer_name.as_ptr()) })
             })
             .collect();
@@ -122,7 +118,7 @@ impl Instance {
         let extension_properties = available_extension_properties
             .into_iter()
             .filter(|item| {
-                enabled_extension_properties_names
+                enabled_extension_names
                     .contains(&unsafe { CStr::from_ptr(item.extension_name.as_ptr()) })
             })
             .collect();
@@ -161,8 +157,6 @@ impl Instance {
 impl Drop for Instance {
     fn drop(&mut self) {
         self.debug_utils = None;
-        unsafe {
-            self.instance_loader.destroy_instance(None);
-        }
+        unsafe { self.instance_loader.destroy_instance(None); }
     }
 }
