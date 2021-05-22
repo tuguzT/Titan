@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::error::Error;
 use std::ops::Deref;
 use std::os::raw::c_char;
@@ -8,6 +9,8 @@ use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
 use super::Instance;
+use super::Surface;
+use super::utils;
 
 pub struct PhysicalDevice {
     properties: vk::PhysicalDeviceProperties,
@@ -129,10 +132,9 @@ pub struct Device {
 impl Device {
     pub fn new(
         instance: &Instance,
+        surface: &Surface,
         physical_device: &PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
-        use crate::error::{Error, ErrorType};
-
         let layer_properties = unsafe {
             enumerate_device_layer_properties(instance.loader(), physical_device.handle)
         }?;
@@ -149,20 +151,33 @@ impl Device {
 
         let graphics_queue_family_properties =
             physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
-        let priorities = [1.0];
-        let queue_family_index = graphics_queue_family_properties
+        let graphics_family_index = graphics_queue_family_properties
             .get(0)
-            .ok_or(Error::new(
-                "no queues with support of graphics",
-                ErrorType::Graphics,
-            ))?
+            .ok_or_else(|| utils::make_error("no queues with graphics support"))?
             .0 as u32;
-        let device_queue_create_info = vk::DeviceQueueCreateInfo::builder()
-            .queue_family_index(queue_family_index)
-            .queue_priorities(&priorities);
-        let queue_create_infos = vec![*device_queue_create_info];
-        let features = vk::PhysicalDeviceFeatures::builder();
+        let present_queue_family_properties =
+            surface.physical_device_queue_family_properties_support(physical_device)?;
+        let present_family_index = present_queue_family_properties
+            .get(0)
+            .ok_or_else(|| utils::make_error("no queues with surface present support"))?
+            .0 as u32;
 
+        let mut unique_family_indices = HashSet::new();
+        unique_family_indices.insert(graphics_family_index);
+        unique_family_indices.insert(present_family_index);
+
+        let priorities = [1.0];
+        let queue_create_infos: Vec<_> = unique_family_indices
+            .into_iter()
+            .map(|family_index| {
+                vk::DeviceQueueCreateInfo::builder()
+                    .queue_family_index(family_index)
+                    .queue_priorities(&priorities)
+                    .build()
+            })
+            .collect();
+
+        let features = vk::PhysicalDeviceFeatures::builder();
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(queue_create_infos.as_slice())
             .enabled_layer_names(p_layer_properties_names.deref())

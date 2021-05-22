@@ -22,8 +22,6 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
-        use super::error::{Error, ErrorType};
-
         let instance = Instance::new(config, window.window())?;
         log::info!(
             "Instance was created! Vulkan API version is {}",
@@ -47,11 +45,10 @@ impl Renderer {
         );
         physical_devices.sort_unstable();
         physical_devices.reverse();
-        let best_physical_device = physical_devices.first().ok_or(Error::new(
-            "no suitable physical devices were found",
-            ErrorType::Graphics,
-        ))?;
-        let device = Device::new(&instance, best_physical_device)?;
+        let best_physical_device = physical_devices
+            .first()
+            .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?;
+        let device = Device::new(&instance, &surface, best_physical_device)?;
 
         Ok(Self {
             instance,
