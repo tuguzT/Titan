@@ -8,9 +8,9 @@ use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
+use super::utils;
 use super::Instance;
 use super::Surface;
-use super::utils;
 
 pub struct PhysicalDevice {
     properties: vk::PhysicalDeviceProperties,

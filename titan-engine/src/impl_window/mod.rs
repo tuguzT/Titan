@@ -8,7 +8,7 @@ use winit::window::WindowBuilder;
 
 use super::config::Config;
 use super::graphics::Renderer;
-use super::window::Callback;
+use super::window::Event as MyEvent;
 
 pub struct Window {
     window: winit::window::Window,
@@ -30,35 +30,35 @@ impl Window {
         &self.window
     }
 
-    pub fn run<T>(self, renderer: Renderer) -> !
+    pub fn run<T>(self, renderer: Renderer, mut callback: T) -> !
     where
-        T: Callback<T> + 'static,
+        T: 'static + FnMut(MyEvent),
     {
         self.window.set_visible(true);
         let window = self.window;
-        let event_handler = T::new();
         let mut renderer = ManuallyDrop::new(renderer);
         self.event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             match event {
                 Event::NewEvents(cause) => match cause {
-                    StartCause::Init => event_handler.created(),
+                    StartCause::Init => callback(MyEvent::Created),
                     _ => (),
                 },
                 Event::WindowEvent { event, window_id } if window_id == window.id() => {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(size) => {
-                            event_handler.resized(size.width, size.height)
+                            let (width, height) = (size.width, size.height);
+                            callback(MyEvent::Resized(width, height))
                         }
                         _ => (),
                     }
                 }
                 Event::MainEventsCleared => renderer.render(),
                 Event::LoopDestroyed => {
-                    event_handler.destroyed();
+                    callback(MyEvent::Destroyed);
                     unsafe { ManuallyDrop::drop(&mut renderer) };
-                    log::info!("Closing this application");
+                    log::info!("closing this application");
                 }
                 _ => (),
             }

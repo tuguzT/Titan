@@ -24,7 +24,7 @@ impl Renderer {
     pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         let instance = Instance::new(config, window.window())?;
         log::info!(
-            "Instance was created! Vulkan API version is {}",
+            "instance was created! Vulkan API version is {}",
             instance.version()
         );
         let surface = Surface::new(&instance, window.window())?;
@@ -40,7 +40,7 @@ impl Renderer {
             )
             .collect();
         log::info!(
-            "Enumerated {} suitable physical devices",
+            "enumerated {} suitable physical devices",
             physical_devices.len()
         );
         physical_devices.sort_unstable();
@@ -59,6 +59,6 @@ impl Renderer {
     }
 
     pub fn render(&self) {
-        log::trace!("Rendering a frame!");
+        log::trace!("rendering a frame!");
     }
 }

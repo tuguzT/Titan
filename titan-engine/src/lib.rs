@@ -3,7 +3,7 @@ use std::error::Error;
 use config::Config;
 use graphics::Renderer;
 use impl_window::Window;
-use window::Callback;
+use window::Event;
 
 pub mod config;
 pub mod error;
@@ -15,12 +15,20 @@ mod impl_window;
 #[cfg(feature = "jni-export")]
 mod jni;
 
-pub fn run<T>(config: Config) -> Result<(), Box<dyn Error>>
+pub fn run<T>(config: Config, callback: T) -> !
 where
-    T: Callback<T> + 'static,
+    T: 'static + FnMut(Event),
 {
-    let window = Window::new(&config)?;
-    let renderer = Renderer::new(&config, &window)?;
+    let window = handle(Window::new(&config));
+    let renderer = handle(Renderer::new(&config, &window));
 
-    window.run::<T>(renderer);
+    window.run(renderer, callback)
+}
+
+fn handle<T>(value: Result<T, Box<dyn Error>>) -> T {
+    if let Err(error) = value {
+        log::error!("{}", error);
+        std::process::exit(exitcode::SOFTWARE)
+    }
+    value.unwrap()
 }
