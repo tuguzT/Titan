@@ -7,8 +7,8 @@ use surface::Surface;
 use super::config::Config;
 use super::impl_window::Window;
 
-mod debug;
 mod device;
+mod ext;
 mod instance;
 mod surface;
 mod utils;

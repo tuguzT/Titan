@@ -10,8 +10,8 @@ use raw_window_handle::HasRawWindowHandle;
 
 use crate::config::{Config, Version, ENGINE_NAME, ENGINE_VERSION};
 
-use super::debug::DebugUtils;
 use super::device::PhysicalDevice;
+use super::ext::DebugUtils;
 use super::utils;
 
 const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS_validation");

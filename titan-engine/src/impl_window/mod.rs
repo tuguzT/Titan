@@ -48,8 +48,8 @@ impl Window {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(size) => {
-                            let (width, height) = (size.width, size.height);
-                            callback(MyEvent::Resized(width, height))
+                            let size = (size.width, size.height);
+                            callback(MyEvent::Resized(size.into()));
                         }
                         _ => (),
                     }
@@ -58,7 +58,7 @@ impl Window {
                 Event::LoopDestroyed => {
                     callback(MyEvent::Destroyed);
                     unsafe { ManuallyDrop::drop(&mut renderer) };
-                    log::info!("closing this application");
+                    log::info!(target: "titan_engine::window", "closing this application");
                 }
                 _ => (),
             }

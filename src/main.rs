@@ -21,13 +21,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::new(APP_NAME.to_string(), version);
     run(config, |event| match event {
         Event::Created => {
-            log::debug!("created")
+            log::debug!("created");
         }
-        Event::Resized(width, height) => {
-            log::debug!("resized with ({}, {})", width, height)
+        Event::Resized(size) => {
+            let size: (u32, u32) = size.into();
+            log::debug!("resized with {:?}", size);
         }
         Event::Destroyed => {
-            log::debug!("destroyed")
+            log::debug!("destroyed");
         }
     })
 }

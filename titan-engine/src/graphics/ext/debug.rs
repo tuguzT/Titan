@@ -71,6 +71,7 @@ unsafe extern "system" fn callback(
             _ => unreachable!(),
         };
         log::log!(
+            target: "titan_engine::graphics::debug",
             level,
             "{:?}:{:?} [{} ({})] : {}",
             message_severity,

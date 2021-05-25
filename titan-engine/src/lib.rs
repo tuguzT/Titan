@@ -27,8 +27,8 @@ where
 
 fn handle<T>(value: Result<T, Box<dyn Error>>) -> T {
     if let Err(error) = value {
-        log::error!("{}", error);
-        std::process::exit(exitcode::SOFTWARE)
+        log::error!("initialization error: {}", error);
+        panic!("initialization error: {}", error);
     }
     value.unwrap()
 }
