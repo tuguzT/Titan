@@ -16,6 +16,8 @@ use crate::impl_window::Window;
 pub struct Swapchain {
     loader: AshSwapchain,
     handle: vk::SwapchainKHR,
+    format: vk::SurfaceFormatKHR,
+    extent: vk::Extent2D,
 }
 
 impl Swapchain {
@@ -65,7 +67,12 @@ impl Swapchain {
 
         let loader = AshSwapchain::new(instance.loader(), device.loader());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
-        Ok(Self { loader, handle })
+        Ok(Self {
+            loader,
+            handle,
+            format: *suitable_format,
+            extent: suitable_extent,
+        })
     }
 
     fn pick_format(formats: &Vec<vk::SurfaceFormatKHR>) -> Option<&vk::SurfaceFormatKHR> {
@@ -93,13 +100,13 @@ impl Swapchain {
         } else {
             let window_size = window.window().inner_size();
             vk::Extent2D {
-                width: u32::max(
+                width: window_size.width.clamp(
                     capabilities.min_image_extent.width,
-                    u32::min(capabilities.max_image_extent.width, window_size.width),
+                    capabilities.max_image_extent.width,
                 ),
-                height: u32::max(
+                height: window_size.height.clamp(
                     capabilities.min_image_extent.height,
-                    u32::min(capabilities.max_image_extent.height, window_size.height),
+                    capabilities.max_image_extent.height,
                 ),
             }
         }
