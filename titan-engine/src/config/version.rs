@@ -41,17 +41,14 @@ impl FromStr for Version {
             return Err("Given string is not a semver".into());
         }
         let mut end: usize = 0;
-        let numbers: Vec<u32> = INT_REGEX
-            .find_iter(s)
-            .filter_map(|int| {
-                end = int.end();
-                int.as_str().parse().ok()
-            })
-            .collect();
+        let mut numbers = INT_REGEX.find_iter(s).filter_map(|int| {
+            end = int.end();
+            int.as_str().parse().ok()
+        });
         Ok(Version {
-            major: numbers[0],
-            minor: numbers[1],
-            patch: numbers[2],
+            major: numbers.next().unwrap(),
+            minor: numbers.next().unwrap(),
+            patch: numbers.next().unwrap(),
             postfix: s[end..].to_string(),
         })
     }
@@ -73,7 +70,7 @@ impl Default for Version {
             major: 0,
             minor: 0,
             patch: 0,
-            postfix: "".to_string(),
+            postfix: String::new(),
         }
     }
 }

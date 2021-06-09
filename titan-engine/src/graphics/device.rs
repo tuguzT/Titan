@@ -49,9 +49,10 @@ impl PhysicalDevice {
     }
 
     pub fn is_suitable(&self) -> bool {
-        let graphics_queue_family_properties =
-            self.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
-        !graphics_queue_family_properties.is_empty()
+        let mut graphics_queue_family_properties = self
+            .queue_family_properties_with(vk::QueueFlags::GRAPHICS)
+            .peekable();
+        graphics_queue_family_properties.peek().is_some()
     }
 
     pub fn score(&self) -> u32 {
@@ -71,15 +72,13 @@ impl PhysicalDevice {
     pub fn queue_family_properties_with(
         &self,
         flags: vk::QueueFlags,
-    ) -> Vec<(usize, &vk::QueueFamilyProperties)> {
-        let mut vector = Vec::with_capacity(self.queue_family_properties.len());
-        for (index, queue_family_properties) in self.queue_family_properties.iter().enumerate() {
-            let ref inner_flags = queue_family_properties.queue_flags;
-            if inner_flags.contains(flags) {
-                vector.push((index, queue_family_properties));
-            }
-        }
-        vector
+    ) -> impl Iterator<Item = (usize, &vk::QueueFamilyProperties)> {
+        self.queue_family_properties.iter().enumerate().filter(
+            move |(_index, queue_family_properties)| {
+                let ref inner_flags = queue_family_properties.queue_flags;
+                inner_flags.contains(flags)
+            },
+        )
     }
 }
 
@@ -152,13 +151,15 @@ impl Device {
         let graphics_queue_family_properties =
             physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
         let graphics_family_index = graphics_queue_family_properties
-            .get(0)
+            .peekable()
+            .peek()
             .ok_or_else(|| utils::make_error("no queues with graphics support"))?
             .0 as u32;
         let present_queue_family_properties =
-            surface.physical_device_queue_family_properties_support(physical_device)?;
+            surface.physical_device_queue_family_properties_support(physical_device);
         let present_family_index = present_queue_family_properties
-            .get(0)
+            .peekable()
+            .peek()
             .ok_or_else(|| utils::make_error("no queues with surface present support"))?
             .0 as u32;
 

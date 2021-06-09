@@ -25,23 +25,21 @@ impl Renderer {
         let instance = Instance::new(config, window.window())?;
         log::info!(
             "instance was created! Vulkan API version is {}",
-            instance.version()
+            instance.version(),
         );
         let surface = Surface::new(&instance, window.window())?;
 
         let mut physical_devices: Vec<PhysicalDevice> = instance
             .enumerate_physical_devices()?
             .into_iter()
-            .filter(
-                |item| match surface.physical_device_queue_family_properties_support(item) {
-                    Ok(vector) => item.is_suitable() && !vector.is_empty(),
-                    Err(_) => false,
-                },
-            )
+            .filter(|item| {
+                let iter = surface.physical_device_queue_family_properties_support(item);
+                item.is_suitable() && iter.peekable().peek().is_some()
+            })
             .collect();
         log::info!(
             "enumerated {} suitable physical devices",
-            physical_devices.len()
+            physical_devices.len(),
         );
         physical_devices.sort_unstable();
         physical_devices.reverse();

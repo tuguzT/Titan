@@ -31,26 +31,23 @@ impl Surface {
         Ok(Self { loader, surface })
     }
 
-    pub fn physical_device_queue_family_properties_support<'a, 'b>(
+    pub fn physical_device_queue_family_properties_support<'a>(
         &'a self,
-        physical_device: &'b PhysicalDevice,
-    ) -> Result<Vec<(usize, &'b vk::QueueFamilyProperties)>, Box<dyn Error>> {
-        let mut vector = Vec::with_capacity(physical_device.queue_family_properties().len());
-        for (index, queue_family_properties) in
-            physical_device.queue_family_properties().iter().enumerate()
-        {
-            let supported = unsafe {
-                self.loader.get_physical_device_surface_support(
-                    physical_device.handle(),
-                    index as u32,
-                    self.surface,
-                )
-            }?;
-            if supported {
-                vector.push((index, queue_family_properties));
-            }
-        }
-        Ok(vector)
+        physical_device: &'a PhysicalDevice,
+    ) -> impl Iterator<Item = (usize, &'a vk::QueueFamilyProperties)> {
+        physical_device
+            .queue_family_properties()
+            .iter()
+            .enumerate()
+            .filter(move |(index, _queue_family_properties)| unsafe {
+                self.loader
+                    .get_physical_device_surface_support(
+                        physical_device.handle(),
+                        *index as u32,
+                        self.surface,
+                    )
+                    .is_ok()
+            })
     }
 }
 

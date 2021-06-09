@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let version = Version::from_str(APP_VERSION_STR)?;
     let config = Config::new(APP_NAME.to_string(), version);
-    run(config, |event| match event {
+    run(config, move |event| match event {
         Event::Created => {
             log::debug!("created");
         }
