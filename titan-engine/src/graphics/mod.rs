@@ -17,7 +17,7 @@ mod utils;
 pub struct Renderer {
     swapchain: Swapchain,
     device: Device,
-    physical_devices: Vec<PhysicalDevice>,
+    physical_device: PhysicalDevice,
     surface: Surface,
     instance: Instance,
 }
@@ -48,10 +48,11 @@ impl Renderer {
         physical_devices.sort_unstable();
         physical_devices.reverse();
         let best_physical_device = physical_devices
-            .first()
+            .into_iter()
+            .next()
             .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?;
 
-        let device = Device::new(&instance, &surface, best_physical_device)?;
+        let device = Device::new(&instance, &surface, &best_physical_device)?;
 
         let swapchain =
             Swapchain::new(window, &instance, &best_physical_device, &device, &surface)?;
@@ -59,7 +60,7 @@ impl Renderer {
         Ok(Self {
             instance,
             surface,
-            physical_devices,
+            physical_device: best_physical_device,
             device,
             swapchain,
         })
