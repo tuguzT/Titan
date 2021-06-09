@@ -10,7 +10,7 @@ use super::PhysicalDevice;
 type SurfaceLoader = ash::extensions::khr::Surface;
 
 pub struct Surface {
-    surface: vk::SurfaceKHR,
+    handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
 }
 
@@ -20,7 +20,7 @@ impl Surface {
         window_handle: &dyn HasRawWindowHandle,
     ) -> Result<Self, Box<dyn Error>> {
         let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
-        let surface = unsafe {
+        let handle = unsafe {
             create_surface(
                 instance.entry_loader(),
                 instance.loader(),
@@ -28,7 +28,44 @@ impl Surface {
                 None,
             )
         }?;
-        Ok(Self { loader, surface })
+        Ok(Self { loader, handle })
+    }
+
+    pub fn handle(&self) -> vk::SurfaceKHR {
+        self.handle
+    }
+
+    pub fn physical_device_capabilities(
+        &self,
+        physical_device: &PhysicalDevice,
+    ) -> Result<vk::SurfaceCapabilitiesKHR, Box<dyn Error>> {
+        let capabilities = unsafe {
+            self.loader
+                .get_physical_device_surface_capabilities(physical_device.handle(), self.handle)?
+        };
+        Ok(capabilities)
+    }
+
+    pub fn physical_device_formats(
+        &self,
+        physical_device: &PhysicalDevice,
+    ) -> Result<Vec<vk::SurfaceFormatKHR>, Box<dyn Error>> {
+        let formats = unsafe {
+            self.loader
+                .get_physical_device_surface_formats(physical_device.handle(), self.handle)?
+        };
+        Ok(formats)
+    }
+
+    pub fn physical_device_present_modes(
+        &self,
+        physical_device: &PhysicalDevice,
+    ) -> Result<Vec<vk::PresentModeKHR>, Box<dyn Error>> {
+        let present_modes = unsafe {
+            self.loader
+                .get_physical_device_surface_present_modes(physical_device.handle(), self.handle)?
+        };
+        Ok(present_modes)
     }
 
     pub fn physical_device_queue_family_properties_support<'a>(
@@ -44,15 +81,21 @@ impl Surface {
                     .get_physical_device_surface_support(
                         physical_device.handle(),
                         *index as u32,
-                        self.surface,
+                        self.handle,
                     )
-                    .is_ok()
+                    .unwrap_or(false)
             })
+    }
+
+    pub fn is_suitable(&self, physical_device: &PhysicalDevice) -> Result<bool, Box<dyn Error>> {
+        let formats = self.physical_device_formats(physical_device)?;
+        let present_modes = self.physical_device_present_modes(physical_device)?;
+        Ok(!formats.is_empty() && !present_modes.is_empty())
     }
 }
 
 impl Drop for Surface {
     fn drop(&mut self) {
-        unsafe { self.loader.destroy_surface(self.surface, None) };
+        unsafe { self.loader.destroy_surface(self.handle, None) };
     }
 }

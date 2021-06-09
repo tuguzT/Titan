@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::error::Error;
+use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
 
@@ -8,20 +9,27 @@ use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
+use super::ext::Swapchain;
 use super::utils;
 use super::Instance;
 use super::Surface;
 
+lazy_static::lazy_static! {
+    static ref REQUIRED_EXTENSIONS: Vec<&'static CStr> = vec![Swapchain::name()];
+}
+
 pub struct PhysicalDevice {
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
-    queue_family_properties: Vec<vk::QueueFamilyProperties>,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
+    queue_family_properties: Vec<vk::QueueFamilyProperties>,
+    layer_properties: Vec<vk::LayerProperties>,
+    extension_properties: Vec<vk::ExtensionProperties>,
     handle: vk::PhysicalDevice,
 }
 
 impl PhysicalDevice {
-    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Self {
+    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
         let properties = unsafe { instance.loader().get_physical_device_properties(handle) };
         let features = unsafe { instance.loader().get_physical_device_features(handle) };
         let memory_properties = unsafe {
@@ -34,14 +42,23 @@ impl PhysicalDevice {
                 .loader()
                 .get_physical_device_queue_family_properties(handle)
         };
+        let layer_properties =
+            unsafe { enumerate_device_layer_properties(instance.loader(), handle)? };
+        let extension_properties = unsafe {
+            instance
+                .loader()
+                .enumerate_device_extension_properties(handle)?
+        };
 
-        Self {
+        Ok(Self {
             handle,
             properties,
             features,
             queue_family_properties,
             memory_properties,
-        }
+            layer_properties,
+            extension_properties,
+        })
     }
 
     pub fn handle(&self) -> ash::vk::PhysicalDevice {
@@ -52,7 +69,18 @@ impl PhysicalDevice {
         let mut graphics_queue_family_properties = self
             .queue_family_properties_with(vk::QueueFlags::GRAPHICS)
             .peekable();
-        graphics_queue_family_properties.peek().is_some()
+        let mut extension_properties_names =
+            self.extension_properties
+                .iter()
+                .map(|extension_property| unsafe {
+                    CStr::from_ptr(extension_property.extension_name.as_ptr())
+                });
+        let has_required_extensions = REQUIRED_EXTENSIONS.iter().any(|required_name| {
+            extension_properties_names
+                .find(|item| item == required_name)
+                .is_some()
+        });
+        graphics_queue_family_properties.peek().is_some() && has_required_extensions
     }
 
     pub fn score(&self) -> u32 {
@@ -79,6 +107,36 @@ impl PhysicalDevice {
                 inner_flags.contains(flags)
             },
         )
+    }
+
+    pub fn layer_properties(&self) -> &Vec<vk::LayerProperties> {
+        &self.layer_properties
+    }
+
+    pub fn extension_properties(&self) -> &Vec<vk::ExtensionProperties> {
+        &self.extension_properties
+    }
+
+    pub fn graphics_family_index(&self) -> Result<u32, Box<dyn Error>> {
+        let graphics_queue_family_properties =
+            self.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
+        let graphics_family_index = graphics_queue_family_properties
+            .peekable()
+            .peek()
+            .ok_or_else(|| utils::make_error("no queues with graphics support"))?
+            .0 as u32;
+        Ok(graphics_family_index)
+    }
+
+    pub fn present_family_index(&self, surface: &Surface) -> Result<u32, Box<dyn Error>> {
+        let present_queue_family_properties =
+            surface.physical_device_queue_family_properties_support(&self);
+        let present_family_index = present_queue_family_properties
+            .peekable()
+            .peek()
+            .ok_or_else(|| utils::make_error("no queues with surface present support"))?
+            .0 as u32;
+        Ok(present_family_index)
     }
 }
 
@@ -122,8 +180,6 @@ unsafe fn enumerate_device_layer_properties(
 }
 
 pub struct Device {
-    layer_properties: Vec<vk::LayerProperties>,
-    extension_properties: Vec<vk::ExtensionProperties>,
     queues: Vec<Queue>,
     loader: ash::Device,
 }
@@ -134,38 +190,9 @@ impl Device {
         surface: &Surface,
         physical_device: &PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
-        let layer_properties = unsafe {
-            enumerate_device_layer_properties(instance.loader(), physical_device.handle)
-        }?;
-        let p_layer_properties_names: Vec<*const c_char> = layer_properties
-            .iter()
-            .map(|layer_property| layer_property.layer_name.as_ptr())
-            .collect();
-
-        let extension_properties = unsafe {
-            instance
-                .loader()
-                .enumerate_device_extension_properties(physical_device.handle)?
-        };
-
-        let graphics_queue_family_properties =
-            physical_device.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
-        let graphics_family_index = graphics_queue_family_properties
-            .peekable()
-            .peek()
-            .ok_or_else(|| utils::make_error("no queues with graphics support"))?
-            .0 as u32;
-        let present_queue_family_properties =
-            surface.physical_device_queue_family_properties_support(physical_device);
-        let present_family_index = present_queue_family_properties
-            .peekable()
-            .peek()
-            .ok_or_else(|| utils::make_error("no queues with surface present support"))?
-            .0 as u32;
-
         let mut unique_family_indices = HashSet::new();
-        unique_family_indices.insert(graphics_family_index);
-        unique_family_indices.insert(present_family_index);
+        unique_family_indices.insert(physical_device.graphics_family_index()?);
+        unique_family_indices.insert(physical_device.present_family_index(surface)?);
 
         let priorities = [1.0];
         let queue_create_infos: Vec<_> = unique_family_indices
@@ -178,10 +205,25 @@ impl Device {
             })
             .collect();
 
+        let p_layer_properties_names: Vec<*const c_char> = physical_device
+            .layer_properties
+            .iter()
+            .map(|item| item.layer_name.as_ptr())
+            .collect();
+        let p_extension_properties_names: Vec<*const c_char> = physical_device
+            .extension_properties
+            .iter()
+            .filter(|item| {
+                let name = unsafe { CStr::from_ptr(item.extension_name.as_ptr()) };
+                REQUIRED_EXTENSIONS.contains(&name)
+            })
+            .map(|item| item.extension_name.as_ptr())
+            .collect();
         let features = vk::PhysicalDeviceFeatures::builder();
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(queue_create_infos.as_slice())
             .enabled_layer_names(p_layer_properties_names.deref())
+            .enabled_extension_names(p_extension_properties_names.deref())
             .enabled_features(&features);
         let loader = unsafe {
             instance
@@ -196,12 +238,7 @@ impl Device {
             }));
         }
 
-        Ok(Self {
-            layer_properties,
-            extension_properties,
-            queues,
-            loader,
-        })
+        Ok(Self { queues, loader })
     }
 
     pub fn loader(&self) -> &ash::Device {

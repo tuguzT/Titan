@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use device::{Device, PhysicalDevice};
+use ext::Swapchain;
 use instance::Instance;
 use surface::Surface;
 
@@ -14,6 +15,7 @@ mod surface;
 mod utils;
 
 pub struct Renderer {
+    swapchain: Swapchain,
     device: Device,
     physical_devices: Vec<PhysicalDevice>,
     surface: Surface,
@@ -34,7 +36,9 @@ impl Renderer {
             .into_iter()
             .filter(|item| {
                 let iter = surface.physical_device_queue_family_properties_support(item);
-                item.is_suitable() && iter.peekable().peek().is_some()
+                item.is_suitable()
+                    && surface.is_suitable(item).unwrap_or(false)
+                    && iter.peekable().peek().is_some()
             })
             .collect();
         log::info!(
@@ -46,13 +50,18 @@ impl Renderer {
         let best_physical_device = physical_devices
             .first()
             .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?;
+
         let device = Device::new(&instance, &surface, best_physical_device)?;
+
+        let swapchain =
+            Swapchain::new(window, &instance, &best_physical_device, &device, &surface)?;
 
         Ok(Self {
             instance,
             surface,
             physical_devices,
             device,
+            swapchain,
         })
     }
 

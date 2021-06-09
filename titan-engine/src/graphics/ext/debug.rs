@@ -3,12 +3,12 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::os::raw::c_void;
 
-use ash::extensions::ext;
+use ash::extensions::ext::DebugUtils as AshDebugUtils;
 use ash::vk;
 use log::Level;
 
 pub struct DebugUtils {
-    loader: ext::DebugUtils,
+    loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
 }
 
@@ -20,15 +20,15 @@ impl DebugUtils {
         let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
             .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
-            .pfn_user_callback(Some(callback));
-        let loader = ext::DebugUtils::new(entry_loader, instance_loader);
+            .pfn_user_callback(Some(self::callback));
+        let loader = AshDebugUtils::new(entry_loader, instance_loader);
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
         Ok(Self { loader, messenger })
     }
 
     pub fn name() -> &'static CStr {
-        ext::DebugUtils::name()
+        AshDebugUtils::name()
     }
 }
 
@@ -78,7 +78,7 @@ unsafe extern "system" fn callback(
             message_type,
             message_id_name,
             message_id_number,
-            message
+            message,
         );
     }
     vk::FALSE

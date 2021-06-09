@@ -14,7 +14,9 @@ use super::device::PhysicalDevice;
 use super::ext::DebugUtils;
 use super::utils;
 
-const VALIDATION_LAYER_NAME: *const c_char = crate::c_str_ptr!("VK_LAYER_KHRONOS_validation");
+lazy_static::lazy_static! {
+    static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
+}
 
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
@@ -63,13 +65,12 @@ impl Instance {
         let mut available_extension_properties_names = available_extension_properties
             .iter()
             .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) });
-        let mut enabled_layer_names = Vec::new();
+        let mut enabled_layer_names: Vec<&CStr> = Vec::new();
         let mut enabled_extension_names = Vec::new();
 
         // Push names' pointers into containers if validation was enabled
-        let validation_layer_name = unsafe { CStr::from_ptr(VALIDATION_LAYER_NAME) };
         if ENABLE_VALIDATION {
-            enabled_layer_names.push(validation_layer_name);
+            enabled_layer_names.push(*VALIDATION_LAYER_NAME);
             if available_extension_properties_names.any(|item| item == DebugUtils::name()) {
                 enabled_extension_names.push(DebugUtils::name());
             }
@@ -145,10 +146,10 @@ impl Instance {
 
     pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
         let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
-        Ok(handles
+        handles
             .iter()
             .map(|handle| PhysicalDevice::new(self, *handle))
-            .collect())
+            .collect()
     }
 }
 
