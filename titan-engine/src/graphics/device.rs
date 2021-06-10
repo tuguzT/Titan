@@ -4,6 +4,7 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
+use std::sync::{Arc, Weak};
 
 use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
@@ -26,29 +27,26 @@ pub struct PhysicalDevice {
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
     handle: vk::PhysicalDevice,
+    parent_instance: Weak<Instance>,
 }
 
 impl PhysicalDevice {
-    pub fn new(instance: &Instance, handle: vk::PhysicalDevice) -> Result<Self, Box<dyn Error>> {
-        let properties = unsafe { instance.loader().get_physical_device_properties(handle) };
-        let features = unsafe { instance.loader().get_physical_device_features(handle) };
-        let memory_properties = unsafe {
-            instance
-                .loader()
-                .get_physical_device_memory_properties(handle)
-        };
-        let queue_family_properties = unsafe {
-            instance
-                .loader()
-                .get_physical_device_queue_family_properties(handle)
-        };
-        let layer_properties =
-            unsafe { enumerate_device_layer_properties(instance.loader(), handle)? };
-        let extension_properties = unsafe {
-            instance
-                .loader()
-                .enumerate_device_extension_properties(handle)?
-        };
+    pub unsafe fn new(
+        instance: &Arc<Instance>,
+        handle: vk::PhysicalDevice,
+    ) -> Result<Self, Box<dyn Error>> {
+        let properties = instance.loader().get_physical_device_properties(handle);
+        let features = instance.loader().get_physical_device_features(handle);
+        let memory_properties = instance
+            .loader()
+            .get_physical_device_memory_properties(handle);
+        let queue_family_properties = instance
+            .loader()
+            .get_physical_device_queue_family_properties(handle);
+        let layer_properties = enumerate_device_layer_properties(instance.loader(), handle)?;
+        let extension_properties = instance
+            .loader()
+            .enumerate_device_extension_properties(handle)?;
 
         Ok(Self {
             handle,
@@ -58,11 +56,16 @@ impl PhysicalDevice {
             memory_properties,
             layer_properties,
             extension_properties,
+            parent_instance: Arc::downgrade(instance),
         })
     }
 
     pub fn handle(&self) -> ash::vk::PhysicalDevice {
         self.handle
+    }
+
+    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
+        self.parent_instance.upgrade()
     }
 
     pub fn is_suitable(&self) -> bool {
@@ -180,16 +183,29 @@ unsafe fn enumerate_device_layer_properties(
 }
 
 pub struct Device {
-    queues: Vec<Queue>,
     loader: ash::Device,
+    queue_create_infos: Vec<vk::DeviceQueueCreateInfo>,
+    parent_physical_device: Weak<PhysicalDevice>,
 }
 
 impl Device {
     pub fn new(
-        instance: &Instance,
         surface: &Surface,
-        physical_device: &PhysicalDevice,
+        physical_device: &Arc<PhysicalDevice>,
     ) -> Result<Self, Box<dyn Error>> {
+        let surface_instance = surface
+            .parent_instance()
+            .ok_or_else(|| utils::make_error("surface parent was lost"))?;
+        let physical_device_instance = physical_device
+            .parent_instance()
+            .ok_or_else(|| utils::make_error("physical device parent was lost"))?;
+        if surface_instance.handle() != physical_device_instance.handle() {
+            return Err(
+                utils::make_error("surface and physical device parents must be the same").into(),
+            );
+        }
+        let instance = surface_instance;
+
         let mut unique_family_indices = HashSet::new();
         unique_family_indices.insert(physical_device.graphics_family_index()?);
         unique_family_indices.insert(physical_device.present_family_index(surface)?);
@@ -230,23 +246,33 @@ impl Device {
                 .loader()
                 .create_device(physical_device.handle, &create_info, None)?
         };
-        let mut queues = Vec::new();
-        for create_info in queue_create_infos.iter() {
-            let range = 0..create_info.queue_count;
-            queues.extend(range.map(|index| unsafe {
-                Queue::new(&loader, create_info.queue_family_index, index)
-            }));
-        }
 
-        Ok(Self { queues, loader })
+        Ok(Self {
+            queue_create_infos,
+            loader,
+            parent_physical_device: Arc::downgrade(physical_device),
+        })
     }
 
     pub fn loader(&self) -> &ash::Device {
         &self.loader
     }
 
-    pub fn queues(&self) -> &Vec<Queue> {
-        &self.queues
+    pub fn parent_physical_device(&self) -> Option<Arc<PhysicalDevice>> {
+        self.parent_physical_device.upgrade()
+    }
+
+    pub fn queues(this: &Arc<Self>) -> Vec<Queue> {
+        let mut queues = Vec::new();
+        for create_info in this.queue_create_infos.iter() {
+            let range = 0..create_info.queue_count;
+            queues.extend(
+                range.map(|index| unsafe {
+                    Queue::new(this, create_info.queue_family_index, index)
+                }),
+            );
+        }
+        queues
     }
 }
 
@@ -259,14 +285,20 @@ impl Drop for Device {
 pub struct Queue {
     family_index: u32,
     handle: vk::Queue,
+    parent_device: Weak<Device>,
 }
 
 impl Queue {
-    unsafe fn new(device: &ash::Device, family_index: u32, index: u32) -> Self {
-        let handle = device.get_device_queue(family_index, index);
+    unsafe fn new(device: &Arc<Device>, family_index: u32, index: u32) -> Self {
+        let handle = device.loader().get_device_queue(family_index, index);
         Self {
             family_index,
             handle,
+            parent_device: Arc::downgrade(device),
         }
+    }
+
+    pub fn parent_device(&self) -> Option<Arc<Device>> {
+        self.parent_device.upgrade()
     }
 }

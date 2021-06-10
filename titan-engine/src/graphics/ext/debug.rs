@@ -2,29 +2,38 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::CStr;
 use std::os::raw::c_void;
+use std::sync::{Arc, Weak};
 
 use ash::extensions::ext::DebugUtils as AshDebugUtils;
 use ash::vk;
 use log::Level;
 
+use crate::graphics::instance::Instance;
+
 pub struct DebugUtils {
     loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
+    parent_instance: Weak<Instance>,
 }
 
 impl DebugUtils {
-    pub fn new(
-        entry_loader: &ash::Entry,
-        instance_loader: &ash::Instance,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance: &Arc<Instance>) -> Result<Self, Box<dyn Error>> {
         let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
             .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
             .pfn_user_callback(Some(self::callback));
-        let loader = AshDebugUtils::new(entry_loader, instance_loader);
+        let loader = AshDebugUtils::new(instance.entry_loader(), instance.loader());
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
-        Ok(Self { loader, messenger })
+        Ok(Self {
+            loader,
+            messenger,
+            parent_instance: Arc::downgrade(instance),
+        })
+    }
+
+    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
+        self.parent_instance.upgrade()
     }
 
     pub fn name() -> &'static CStr {

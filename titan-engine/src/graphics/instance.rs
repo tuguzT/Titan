@@ -2,6 +2,7 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::ops::Deref;
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
@@ -18,13 +19,12 @@ lazy_static::lazy_static! {
     static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
 }
 
-const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
+pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
-    debug_utils: Option<DebugUtils>,
     instance_loader: ash::Instance,
     entry_loader: ash::Entry,
 }
@@ -95,16 +95,6 @@ impl Instance {
             .enabled_extension_names(p_enabled_extension_names.as_slice());
         let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
 
-        // Initialize debug utils extension
-        let debug_utils =
-            if ENABLE_VALIDATION && enabled_extension_names.contains(&DebugUtils::name()) {
-                let returnable = DebugUtils::new(&entry_loader, &instance_loader)?;
-                log::info!("Vulkan validation layer enabled");
-                Some(returnable)
-            } else {
-                None
-            };
-
         // Enumerate enabled layers
         let layer_properties = available_layer_properties
             .into_iter()
@@ -128,7 +118,6 @@ impl Instance {
             version,
             layer_properties,
             extension_properties,
-            debug_utils,
         })
     }
 
@@ -144,20 +133,23 @@ impl Instance {
         &self.instance_loader
     }
 
-    pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
-        let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
+    pub fn handle(&self) -> vk::Instance {
+        self.loader().handle()
+    }
+
+    pub fn enumerate_physical_devices(
+        this: &Arc<Self>,
+    ) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
+        let handles = unsafe { this.instance_loader.enumerate_physical_devices()? };
         handles
             .iter()
-            .map(|handle| PhysicalDevice::new(self, *handle))
+            .map(|handle| unsafe { PhysicalDevice::new(this, *handle) })
             .collect()
     }
 }
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        self.debug_utils = None;
-        unsafe {
-            self.instance_loader.destroy_instance(None);
-        }
+        unsafe { self.instance_loader.destroy_instance(None) }
     }
 }

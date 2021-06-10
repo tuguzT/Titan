@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::sync::{Arc, Weak};
 
 use ash::vk;
 use ash_window::create_surface;
@@ -12,11 +13,12 @@ type SurfaceLoader = ash::extensions::khr::Surface;
 pub struct Surface {
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
+    parent_instance: Weak<Instance>,
 }
 
 impl Surface {
     pub fn new(
-        instance: &Instance,
+        instance: &Arc<Instance>,
         window_handle: &dyn HasRawWindowHandle,
     ) -> Result<Self, Box<dyn Error>> {
         let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
@@ -28,11 +30,19 @@ impl Surface {
                 None,
             )
         }?;
-        Ok(Self { loader, handle })
+        Ok(Self {
+            loader,
+            handle,
+            parent_instance: Arc::downgrade(instance),
+        })
     }
 
     pub fn handle(&self) -> vk::SurfaceKHR {
         self.handle
+    }
+
+    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
+        self.parent_instance.upgrade()
     }
 
     pub fn physical_device_capabilities(

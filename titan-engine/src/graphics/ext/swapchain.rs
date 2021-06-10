@@ -1,41 +1,53 @@
 use std::borrow::Borrow;
 use std::error::Error;
 use std::ffi::CStr;
+use std::sync::{Arc, Weak};
 
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 
-use crate::graphics::{
-    device::{Device, PhysicalDevice},
-    instance::Instance,
-    surface::Surface,
-    utils,
-};
+use crate::graphics::{device::Device, instance::Instance, surface::Surface, utils};
 use crate::impl_window::Window;
 
 pub struct Swapchain {
-    loader: AshSwapchain,
     handle: vk::SwapchainKHR,
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
+    loader: AshSwapchain,
+    parent_device: Weak<Device>,
+    parent_surface: Weak<Surface>,
 }
 
 impl Swapchain {
     pub fn new(
         window: &Window,
-        instance: &Instance,
-        physical_device: &PhysicalDevice,
-        device: &Device,
-        surface: &Surface,
+        device: &Arc<Device>,
+        surface: &Arc<Surface>,
     ) -> Result<Self, Box<dyn Error>> {
-        let formats = surface.physical_device_formats(physical_device)?;
+        let physical_device = device
+            .parent_physical_device()
+            .ok_or_else(|| utils::make_error("device parent was lost"))?;
+        let surface_instance = surface
+            .parent_instance()
+            .ok_or_else(|| utils::make_error("surface parent was lost"))?;
+        let physical_device_instance = physical_device
+            .parent_instance()
+            .ok_or_else(|| utils::make_error("physical device parent was lost"))?;
+        if surface_instance.handle() != physical_device_instance.handle() {
+            return Err(
+                utils::make_error("surface and physical device parents must be the same").into(),
+            );
+        }
+        let instance = surface_instance;
+
+        let formats = surface.physical_device_formats(&physical_device)?;
         let suitable_format = Self::pick_format(&formats)
             .ok_or_else(|| utils::make_error("no suitable format found"))?;
 
-        let present_modes = surface.physical_device_present_modes(physical_device)?;
+        let present_modes = surface.physical_device_present_modes(&physical_device)?;
         let suitable_present_mode = Self::pick_present_mode(&present_modes);
 
-        let capabilities = surface.physical_device_capabilities(physical_device)?;
+        let capabilities = surface.physical_device_capabilities(&physical_device)?;
         let suitable_extent = Self::pick_extent(window, &capabilities);
 
         let mut image_count = capabilities.min_image_count + 1;
@@ -72,7 +84,17 @@ impl Swapchain {
             handle,
             format: *suitable_format,
             extent: suitable_extent,
+            parent_device: Arc::downgrade(device),
+            parent_surface: Arc::downgrade(surface),
         })
+    }
+
+    pub fn parent_device(&self) -> Option<Arc<Device>> {
+        self.parent_device.upgrade()
+    }
+
+    pub fn parent_surface(&self) -> Option<Arc<Surface>> {
+        self.parent_surface.upgrade()
     }
 
     fn pick_format(formats: &Vec<vk::SurfaceFormatKHR>) -> Option<&vk::SurfaceFormatKHR> {
