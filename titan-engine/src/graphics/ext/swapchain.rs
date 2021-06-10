@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 
-use crate::graphics::{device::Device, instance::Instance, surface::Surface, utils};
+use crate::graphics::{device::Device, image::Image, surface::Surface, utils};
 use crate::impl_window::Window;
 
 pub struct Swapchain {
@@ -95,6 +95,21 @@ impl Swapchain {
 
     pub fn parent_surface(&self) -> Option<Arc<Surface>> {
         self.parent_surface.upgrade()
+    }
+
+    pub fn format(&self) -> vk::SurfaceFormatKHR {
+        self.format
+    }
+
+    pub fn enumerate_images(this: &Arc<Self>) -> Result<Vec<Image>, Box<dyn Error>> {
+        let device = this
+            .parent_device()
+            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let handles = unsafe { this.loader.get_swapchain_images(this.handle)? };
+        Ok(handles
+            .into_iter()
+            .map(|handle| unsafe { Image::from_raw(&device, handle) })
+            .collect())
     }
 
     fn pick_format(formats: &Vec<vk::SurfaceFormatKHR>) -> Option<&vk::SurfaceFormatKHR> {

@@ -1,8 +1,11 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use device::{Device, PhysicalDevice};
+use ash::vk;
+
+use device::{Device, PhysicalDevice, Queue};
 use ext::{DebugUtils, Swapchain};
+use image::{Image, ImageView};
 use instance::Instance;
 use surface::Surface;
 
@@ -11,12 +14,16 @@ use super::impl_window::Window;
 
 mod device;
 mod ext;
+mod image;
 mod instance;
 mod surface;
 mod utils;
 
 pub struct Renderer {
+    swapchain_image_views: Vec<Arc<ImageView>>,
+    swapchain_images: Vec<Arc<Image>>,
     swapchain: Arc<Swapchain>,
+    device_queues: Vec<Arc<Queue>>,
     device: Arc<Device>,
     physical_device: Arc<PhysicalDevice>,
     surface: Arc<Surface>,
@@ -32,6 +39,7 @@ impl Renderer {
             instance.version(),
         );
         let debug_utils = Arc::new(if instance::ENABLE_VALIDATION {
+            log::info!("debug_utils was attached to instance");
             Some(DebugUtils::new(&instance)?)
         } else {
             None
@@ -61,7 +69,39 @@ impl Renderer {
                 .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?,
         );
         let device = Arc::new(Device::new(&surface, &physical_device)?);
+        let device_queues = Device::enumerate_queues(&device)
+            .into_iter()
+            .map(|queue| Arc::new(queue))
+            .collect();
+
         let swapchain = Arc::new(Swapchain::new(window, &device, &surface)?);
+        let swapchain_images = Swapchain::enumerate_images(&swapchain)?
+            .into_iter()
+            .map(|image| Arc::new(image))
+            .collect::<Vec<_>>();
+        let swapchain_image_views = swapchain_images
+            .iter()
+            .map(|image| unsafe {
+                let create_info = vk::ImageViewCreateInfo::builder()
+                    .image(image.handle())
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(swapchain.format().format)
+                    .components(vk::ComponentMapping {
+                        r: vk::ComponentSwizzle::IDENTITY,
+                        g: vk::ComponentSwizzle::IDENTITY,
+                        b: vk::ComponentSwizzle::IDENTITY,
+                        a: vk::ComponentSwizzle::IDENTITY,
+                    })
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    });
+                ImageView::new(image, &create_info).map(|image_view| Arc::new(image_view))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             instance,
@@ -69,7 +109,10 @@ impl Renderer {
             surface,
             physical_device,
             device,
+            device_queues,
             swapchain,
+            swapchain_images,
+            swapchain_image_views,
         })
     }
 

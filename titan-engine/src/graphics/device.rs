@@ -262,7 +262,7 @@ impl Device {
         self.parent_physical_device.upgrade()
     }
 
-    pub fn queues(this: &Arc<Self>) -> Vec<Queue> {
+    pub fn enumerate_queues(this: &Arc<Self>) -> Vec<Queue> {
         let mut queues = Vec::new();
         for create_info in this.queue_create_infos.iter() {
             let range = 0..create_info.queue_count;
