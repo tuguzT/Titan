@@ -16,6 +16,7 @@ mod device;
 mod ext;
 mod image;
 mod instance;
+mod shaders;
 mod surface;
 mod utils;
 
