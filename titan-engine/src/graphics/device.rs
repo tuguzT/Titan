@@ -258,6 +258,10 @@ impl Device {
         &self.loader
     }
 
+    pub fn handle(&self) -> vk::Device {
+        self.loader.handle()
+    }
+
     pub fn parent_physical_device(&self) -> Option<Arc<PhysicalDevice>> {
         self.parent_physical_device.upgrade()
     }

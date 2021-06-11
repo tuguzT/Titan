@@ -1,8 +1,9 @@
 use std::error::Error;
-use std::sync::{Weak, Arc};
+use std::io::Cursor;
+use std::sync::{Arc, Weak};
 
-use ash::vk;
 use ash::version::DeviceV1_0;
+use ash::vk;
 
 use super::Device;
 
@@ -17,17 +18,22 @@ pub struct ShaderModule {
 
 impl ShaderModule {
     pub fn new(device: &Arc<Device>, code: &[u8]) -> Result<Self, Box<dyn Error>> {
-        let code = unsafe { code.align_to().1.to_owned() };
-        let create_info = vk::ShaderModuleCreateInfo::builder()
-            .code(code.as_slice());
-        let handle = unsafe {
-            device.loader().create_shader_module(&create_info, None)?
-        };
+        let code = ash::util::read_spv(&mut Cursor::new(code))?;
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_slice());
+        let handle = unsafe { device.loader().create_shader_module(&create_info, None)? };
         Ok(Self {
             handle,
-            code,
+            code: code.to_owned(),
             parent_device: Arc::downgrade(device),
         })
+    }
+
+    pub fn handle(&self) -> vk::ShaderModule {
+        self.handle
+    }
+
+    pub fn code(&self) -> &[u32] {
+        self.code.as_slice()
     }
 
     pub fn parent_device(&self) -> Option<Arc<Device>> {

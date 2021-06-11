@@ -101,6 +101,10 @@ impl Swapchain {
         self.format
     }
 
+    pub fn extent(&self) -> vk::Extent2D {
+        self.extent
+    }
+
     pub fn enumerate_images(this: &Arc<Self>) -> Result<Vec<Image>, Box<dyn Error>> {
         let device = this
             .parent_device()

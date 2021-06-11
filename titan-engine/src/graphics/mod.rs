@@ -7,6 +7,7 @@ use device::{Device, PhysicalDevice, Queue};
 use ext::{DebugUtils, Swapchain};
 use image::{Image, ImageView};
 use instance::Instance;
+use pipeline::{GraphicsPipeline, PipelineLayout};
 use surface::Surface;
 
 use super::config::Config;
@@ -16,11 +17,14 @@ mod device;
 mod ext;
 mod image;
 mod instance;
+mod pipeline;
 mod shaders;
 mod surface;
 mod utils;
 
 pub struct Renderer {
+    graphics_pipeline: Arc<GraphicsPipeline>,
+    pipeline_layout: Arc<PipelineLayout>,
     swapchain_image_views: Vec<Arc<ImageView>>,
     swapchain_images: Vec<Arc<Image>>,
     swapchain: Arc<Swapchain>,
@@ -104,6 +108,9 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let pipeline_layout = Arc::new(PipelineLayout::new(&device)?);
+        let graphics_pipeline = Arc::new(GraphicsPipeline::new(&swapchain, &pipeline_layout)?);
+
         Ok(Self {
             instance,
             debug_utils,
@@ -114,6 +121,8 @@ impl Renderer {
             swapchain,
             swapchain_images,
             swapchain_image_views,
+            pipeline_layout,
+            graphics_pipeline,
         })
     }
 
