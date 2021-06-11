@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use ash::vk;
 
+use commands::{CommandBuffer, CommandPool};
 use device::{Device, PhysicalDevice, Queue};
 use ext::{DebugUtils, Swapchain};
 use framebuffer::Framebuffer;
@@ -14,6 +15,7 @@ use surface::Surface;
 use super::config::Config;
 use super::impl_window::Window;
 
+mod commands;
 mod device;
 mod ext;
 mod framebuffer;
@@ -25,6 +27,8 @@ mod surface;
 mod utils;
 
 pub struct Renderer {
+    command_buffers: Vec<Arc<CommandBuffer>>,
+    command_pool: Arc<CommandPool>,
     framebuffers: Vec<Arc<Framebuffer>>,
     graphics_pipeline: Arc<GraphicsPipeline>,
     pipeline_layout: Arc<PipelineLayout>,
@@ -130,6 +134,19 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let graphics_queue_family_index = physical_device.graphics_family_index().unwrap();
+        let command_pool_create_info =
+            vk::CommandPoolCreateInfo::builder().queue_family_index(graphics_queue_family_index);
+        let command_pool =
+            unsafe { Arc::new(CommandPool::new(&device, &command_pool_create_info)?) };
+        let command_buffers: Vec<_> = CommandPool::enumerate_command_buffers(
+            &command_pool,
+            swapchain_image_views.len() as u32,
+        )?
+        .into_iter()
+        .map(|command_buffer| Arc::new(command_buffer))
+        .collect();
+
         Ok(Self {
             instance,
             debug_utils,
@@ -144,6 +161,8 @@ impl Renderer {
             pipeline_layout,
             graphics_pipeline,
             framebuffers,
+            command_pool,
+            command_buffers,
         })
     }
 
