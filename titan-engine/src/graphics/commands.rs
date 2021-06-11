@@ -4,8 +4,7 @@ use std::sync::{Arc, Weak};
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use crate::graphics::utils;
-
+use super::utils;
 use super::Device;
 
 pub struct CommandPool {
@@ -76,5 +75,38 @@ impl CommandBuffer {
             handle,
             parent_command_pool: Arc::downgrade(command_pool),
         }
+    }
+
+    pub fn parent_command_pool(&self) -> Option<Arc<CommandPool>> {
+        self.parent_command_pool.upgrade()
+    }
+
+    pub fn handle(&self) -> vk::CommandBuffer {
+        self.handle
+    }
+
+    pub unsafe fn begin(
+        &self,
+        begin_info: &vk::CommandBufferBeginInfo,
+    ) -> Result<(), Box<dyn Error>> {
+        let command_pool = self
+            .parent_command_pool()
+            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let device = command_pool
+            .parent_device()
+            .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+        Ok(device
+            .loader()
+            .begin_command_buffer(self.handle, begin_info)?)
+    }
+
+    pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
+        let command_pool = self
+            .parent_command_pool()
+            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let device = command_pool
+            .parent_device()
+            .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+        Ok(device.loader().end_command_buffer(self.handle)?)
     }
 }

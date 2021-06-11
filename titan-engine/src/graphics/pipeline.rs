@@ -7,6 +7,7 @@ use ash::vk;
 use super::ext::Swapchain;
 use super::shaders::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE};
 use super::utils;
+use super::CommandBuffer;
 use super::Device;
 
 pub struct GraphicsPipeline {
@@ -134,6 +135,10 @@ impl GraphicsPipeline {
         })
     }
 
+    pub fn handle(&self) -> vk::Pipeline {
+        self.handle
+    }
+
     pub fn parent_render_pass(&self) -> Option<Arc<RenderPass>> {
         self.parent_render_pass.upgrade()
     }
@@ -250,6 +255,33 @@ impl RenderPass {
 
     pub fn parent_swapchain(&self) -> Option<Arc<Swapchain>> {
         self.parent_swapchain.upgrade()
+    }
+
+    pub unsafe fn begin(
+        &self,
+        command_buffer: &CommandBuffer,
+        begin_info: &vk::RenderPassBeginInfo,
+        contents: vk::SubpassContents,
+    ) -> Result<(), Box<dyn Error>> {
+        let swapchain = self
+            .parent_swapchain()
+            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let device = swapchain
+            .parent_device()
+            .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
+        Ok(device
+            .loader()
+            .cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
+    }
+
+    pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<(), Box<dyn Error>> {
+        let swapchain = self
+            .parent_swapchain()
+            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let device = swapchain
+            .parent_device()
+            .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
+        Ok(device.loader().cmd_end_render_pass(command_buffer.handle()))
     }
 }
 

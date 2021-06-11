@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::sync::Arc;
 
+use ash::version::DeviceV1_0;
 use ash::vk;
 
 use commands::{CommandBuffer, CommandPool};
@@ -146,6 +147,40 @@ impl Renderer {
         .into_iter()
         .map(|command_buffer| Arc::new(command_buffer))
         .collect();
+
+        for (index, command_buffer) in command_buffers.iter().enumerate() {
+            let begin_info = vk::CommandBufferBeginInfo::builder();
+            unsafe {
+                command_buffer.begin(&begin_info)?;
+                let clear_color = vk::ClearValue {
+                    color: vk::ClearColorValue {
+                        float32: [0.0, 0.0, 0.0, 1.0],
+                    },
+                };
+                let clear_values = [clear_color];
+                let begin_info = vk::RenderPassBeginInfo::builder()
+                    .render_pass(render_pass.handle())
+                    .framebuffer(framebuffers[index].handle())
+                    .render_area(vk::Rect2D {
+                        offset: Default::default(),
+                        extent: swapchain.extent(),
+                    })
+                    .clear_values(&clear_values);
+                render_pass.begin(command_buffer, &begin_info, vk::SubpassContents::INLINE)?;
+
+                device.loader().cmd_bind_pipeline(
+                    command_buffer.handle(),
+                    vk::PipelineBindPoint::GRAPHICS,
+                    graphics_pipeline.handle(),
+                );
+                device
+                    .loader()
+                    .cmd_draw(command_buffer.handle(), 3, 1, 0, 0);
+
+                render_pass.end(command_buffer)?;
+                command_buffer.end()?;
+            }
+        }
 
         Ok(Self {
             instance,

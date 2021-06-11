@@ -23,6 +23,10 @@ impl Framebuffer {
         })
     }
 
+    pub fn handle(&self) -> vk::Framebuffer {
+        self.handle
+    }
+
     pub fn parent_device(&self) -> Option<Arc<Device>> {
         self.parent_device.upgrade()
     }
