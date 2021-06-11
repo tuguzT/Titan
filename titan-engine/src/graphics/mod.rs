@@ -12,6 +12,7 @@ use image::{Image, ImageView};
 use instance::Instance;
 use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
+use sync::{Fence, Semaphore};
 
 use super::config::Config;
 use super::impl_window::Window;
@@ -25,9 +26,17 @@ mod instance;
 mod pipeline;
 mod shaders;
 mod surface;
+mod sync;
 mod utils;
 
+const MAX_FRAMES_IN_FLIGHT: usize = 10;
+
 pub struct Renderer {
+    frame_index: usize,
+    images_in_flight: Vec<vk::Fence>,
+    in_flight_fences: Vec<Arc<Fence>>,
+    render_finished_semaphores: Vec<Arc<Semaphore>>,
+    image_available_semaphores: Vec<Arc<Semaphore>>,
     command_buffers: Vec<Arc<CommandBuffer>>,
     command_pool: Arc<CommandPool>,
     framebuffers: Vec<Arc<Framebuffer>>,
@@ -182,6 +191,21 @@ impl Renderer {
             }
         }
 
+        let create_semaphores = || {
+            (0..MAX_FRAMES_IN_FLIGHT)
+                .into_iter()
+                .map(|_| Semaphore::new(&device).map(|semaphore| Arc::new(semaphore)))
+                .collect::<Result<Vec<_>, _>>()
+        };
+        let image_available_semaphores = create_semaphores()?;
+        let render_finished_semaphores = create_semaphores()?;
+        let fence_create_info =
+            vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+        let in_flight_fences = (0..MAX_FRAMES_IN_FLIGHT)
+            .into_iter()
+            .map(|_| Fence::new(&device, &fence_create_info).map(|fence| Arc::new(fence)))
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Self {
             instance,
             debug_utils,
@@ -198,10 +222,82 @@ impl Renderer {
             framebuffers,
             command_pool,
             command_buffers,
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
+            images_in_flight: vec![vk::Fence::null(); MAX_FRAMES_IN_FLIGHT],
+            frame_index: 0,
         })
     }
 
-    pub fn render(&self) {
-        log::trace!("rendering a frame!");
+    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+        unsafe {
+            let fences = [self.in_flight_fences[self.frame_index].handle()];
+            self.device
+                .loader()
+                .wait_for_fences(&fences, true, u64::MAX)?;
+        }
+
+        let image_index = unsafe {
+            self.swapchain
+                .loader()
+                .acquire_next_image(
+                    self.swapchain.handle(),
+                    u64::MAX,
+                    self.image_available_semaphores[self.frame_index].handle(),
+                    vk::Fence::null(),
+                )?
+                .0 as usize
+        };
+
+        if self.images_in_flight[image_index] != vk::Fence::null() {
+            let fences = [self.images_in_flight[image_index]];
+            unsafe {
+                self.device
+                    .loader()
+                    .wait_for_fences(&fences, true, u64::MAX)?;
+            }
+        }
+        self.images_in_flight[image_index] = self.in_flight_fences[self.frame_index].handle();
+
+        let wait_semaphores = [self.image_available_semaphores[self.frame_index].handle()];
+        let signal_semaphores = [self.render_finished_semaphores[self.frame_index].handle()];
+        let command_buffers = [self.command_buffers[image_index].handle()];
+        let submit_info = vk::SubmitInfo::builder()
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&signal_semaphores);
+        let submits = [*submit_info];
+        unsafe {
+            let fences = [self.in_flight_fences[self.frame_index].handle()];
+            self.device.loader().reset_fences(&fences)?;
+            self.device.loader().queue_submit(
+                self.device_queues[0].handle(),
+                &submits,
+                self.in_flight_fences[self.frame_index].handle(),
+            )?;
+        }
+        let swapchains = [self.swapchain.handle()];
+        let image_indices = [image_index as u32];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        unsafe {
+            let queue_handle = self.device_queues[0].handle();
+            self.swapchain
+                .loader()
+                .queue_present(queue_handle, &present_info)?;
+        }
+        self.frame_index = (self.frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
+        Ok(())
+    }
+
+    pub fn wait(&mut self) -> Result<(), Box<dyn Error>> {
+        unsafe {
+            self.device.loader().device_wait_idle()?;
+        }
+        Ok(())
     }
 }

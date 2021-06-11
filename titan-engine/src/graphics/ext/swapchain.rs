@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 
-use crate::graphics::{device::Device, image::Image, surface::Surface, utils};
+use crate::graphics::{utils, Device, Image, Surface};
 use crate::impl_window::Window;
 
 pub struct Swapchain {
@@ -87,6 +87,14 @@ impl Swapchain {
             parent_device: Arc::downgrade(device),
             parent_surface: Arc::downgrade(surface),
         })
+    }
+
+    pub fn loader(&self) -> &AshSwapchain {
+        &self.loader
+    }
+
+    pub fn handle(&self) -> vk::SwapchainKHR {
+        self.handle
     }
 
     pub fn parent_device(&self) -> Option<Arc<Device>> {

@@ -239,9 +239,19 @@ impl RenderPass {
             .color_attachments(&color_attachment_refs);
         let subpasses = [*subpass_description];
 
+        let subpass_dependency = vk::SubpassDependency::builder()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags::default())
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+        let dependencies = [*subpass_dependency];
+
         let create_info = vk::RenderPassCreateInfo::builder()
             .attachments(&color_attachments)
-            .subpasses(&subpasses);
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
         let handle = unsafe { device.loader().create_render_pass(&create_info, None)? };
         Ok(Self {
             handle,

@@ -54,9 +54,17 @@ impl Window {
                         _ => (),
                     }
                 }
-                Event::MainEventsCleared => renderer.render(),
+                Event::MainEventsCleared => {
+                    if let Err(error) = renderer.render() {
+                        log::error!("{}", error);
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
                 Event::LoopDestroyed => {
                     callback(MyEvent::Destroyed);
+                    if let Err(error) = renderer.wait() {
+                        log::error!("{}", error);
+                    }
                     unsafe { ManuallyDrop::drop(&mut renderer) };
                     log::info!(target: "titan_engine::window", "closing this application");
                 }

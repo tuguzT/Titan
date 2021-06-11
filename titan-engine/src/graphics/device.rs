@@ -302,6 +302,10 @@ impl Queue {
         }
     }
 
+    pub fn handle(&self) -> vk::Queue {
+        self.handle
+    }
+
     pub fn parent_device(&self) -> Option<Arc<Device>> {
         self.parent_device.upgrade()
     }
