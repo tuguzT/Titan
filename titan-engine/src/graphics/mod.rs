@@ -5,9 +5,10 @@ use ash::vk;
 
 use device::{Device, PhysicalDevice, Queue};
 use ext::{DebugUtils, Swapchain};
+use framebuffer::Framebuffer;
 use image::{Image, ImageView};
 use instance::Instance;
-use pipeline::{GraphicsPipeline, PipelineLayout};
+use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
 
 use super::config::Config;
@@ -15,6 +16,7 @@ use super::impl_window::Window;
 
 mod device;
 mod ext;
+mod framebuffer;
 mod image;
 mod instance;
 mod pipeline;
@@ -23,8 +25,10 @@ mod surface;
 mod utils;
 
 pub struct Renderer {
+    framebuffers: Vec<Arc<Framebuffer>>,
     graphics_pipeline: Arc<GraphicsPipeline>,
     pipeline_layout: Arc<PipelineLayout>,
+    render_pass: Arc<RenderPass>,
     swapchain_image_views: Vec<Arc<ImageView>>,
     swapchain_images: Vec<Arc<Image>>,
     swapchain: Arc<Swapchain>,
@@ -32,7 +36,7 @@ pub struct Renderer {
     device: Arc<Device>,
     physical_device: Arc<PhysicalDevice>,
     surface: Arc<Surface>,
-    debug_utils: Arc<Option<DebugUtils>>,
+    debug_utils: Option<Arc<DebugUtils>>,
     instance: Arc<Instance>,
 }
 
@@ -43,12 +47,12 @@ impl Renderer {
             "instance was created! Vulkan API version is {}",
             instance.version(),
         );
-        let debug_utils = Arc::new(if instance::ENABLE_VALIDATION {
+        let debug_utils = if instance::ENABLE_VALIDATION {
             log::info!("debug_utils was attached to instance");
-            Some(DebugUtils::new(&instance)?)
+            Some(Arc::new(DebugUtils::new(&instance)?))
         } else {
             None
-        });
+        };
         let surface = Arc::new(Surface::new(&instance, window.window())?);
 
         let mut physical_devices: Vec<PhysicalDevice> =
@@ -108,8 +112,23 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let render_pass = Arc::new(RenderPass::new(&swapchain)?);
         let pipeline_layout = Arc::new(PipelineLayout::new(&device)?);
-        let graphics_pipeline = Arc::new(GraphicsPipeline::new(&swapchain, &pipeline_layout)?);
+        let graphics_pipeline = Arc::new(GraphicsPipeline::new(&render_pass, &pipeline_layout)?);
+
+        let framebuffers = swapchain_image_views
+            .iter()
+            .map(|image_view| unsafe {
+                let attachments = [image_view.handle()];
+                let create_info = vk::FramebufferCreateInfo::builder()
+                    .attachments(&attachments)
+                    .render_pass(render_pass.handle())
+                    .width(swapchain.extent().width)
+                    .height(swapchain.extent().height)
+                    .layers(1);
+                Framebuffer::new(&device, &create_info).map(|framebuffer| Arc::new(framebuffer))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             instance,
@@ -121,8 +140,10 @@ impl Renderer {
             swapchain,
             swapchain_images,
             swapchain_image_views,
+            render_pass,
             pipeline_layout,
             graphics_pipeline,
+            framebuffers,
         })
     }
 

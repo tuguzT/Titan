@@ -4,25 +4,28 @@ use std::sync::{Arc, Weak};
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::Device;
 use super::ext::Swapchain;
-use super::shaders::{FRAG_SHADER_CODE, ShaderModule, VERT_SHADER_CODE};
+use super::shaders::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE};
 use super::utils;
+use super::Device;
 
 pub struct GraphicsPipeline {
     handle: vk::Pipeline,
-    parent_swapchain: Weak<Swapchain>,
+    parent_render_pass: Weak<RenderPass>,
     parent_pipeline_layout: Weak<PipelineLayout>,
 }
 
 impl GraphicsPipeline {
     pub fn new(
-        swapchain: &Arc<Swapchain>,
+        render_pass: &Arc<RenderPass>,
         pipeline_layout: &Arc<PipelineLayout>,
     ) -> Result<Self, Box<dyn Error>> {
         let pipeline_layout_device = pipeline_layout
             .parent_device()
             .ok_or_else(|| utils::make_error("pipeline layout parent was lost"))?;
+        let swapchain = render_pass
+            .parent_swapchain()
+            .ok_or_else(|| utils::make_error("render pass parent was lost"))?;
         let device = swapchain
             .parent_device()
             .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
@@ -32,7 +35,6 @@ impl GraphicsPipeline {
             )
             .into());
         }
-        let render_pass = RenderPass::new(swapchain)?;
 
         let vert_shader_module = ShaderModule::new(&device, VERT_SHADER_CODE)?;
         let frag_shader_module = ShaderModule::new(&device, FRAG_SHADER_CODE)?;
@@ -105,8 +107,8 @@ impl GraphicsPipeline {
             .rasterization_state(&rasterizer)
             .multisample_state(&multisampling)
             .color_blend_state(&color_blending)
-            .layout(pipeline_layout.handle)
-            .render_pass(render_pass.handle)
+            .layout(pipeline_layout.handle())
+            .render_pass(render_pass.handle())
             .subpass(0)
             .base_pipeline_index(-1);
         let create_infos = [*create_info];
@@ -127,19 +129,27 @@ impl GraphicsPipeline {
             .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
         Ok(Self {
             handle,
-            parent_swapchain: Arc::downgrade(swapchain),
+            parent_render_pass: Arc::downgrade(render_pass),
             parent_pipeline_layout: Arc::downgrade(pipeline_layout),
         })
     }
 
-    pub fn parent_swapchain(&self) -> Option<Arc<Swapchain>> {
-        self.parent_swapchain.upgrade()
+    pub fn parent_render_pass(&self) -> Option<Arc<RenderPass>> {
+        self.parent_render_pass.upgrade()
+    }
+
+    pub fn parent_pipeline_layout(&self) -> Option<Arc<PipelineLayout>> {
+        self.parent_pipeline_layout.upgrade()
     }
 }
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
-        let swapchain = match self.parent_swapchain() {
+        let render_pass = match self.parent_render_pass() {
+            None => return,
+            Some(value) => value,
+        };
+        let swapchain = match render_pass.parent_swapchain() {
             None => return,
             Some(value) => value,
         };
@@ -171,6 +181,10 @@ impl PipelineLayout {
     pub fn new(device: &Arc<Device>) -> Result<Self, Box<dyn Error>> {
         let create_info = vk::PipelineLayoutCreateInfo::default();
         unsafe { Self::with(device, &create_info) }
+    }
+
+    pub fn handle(&self) -> vk::PipelineLayout {
+        self.handle
     }
 
     pub fn parent_device(&self) -> Option<Arc<Device>> {
@@ -228,6 +242,10 @@ impl RenderPass {
             handle,
             parent_swapchain: Arc::downgrade(swapchain),
         })
+    }
+
+    pub fn handle(&self) -> vk::RenderPass {
+        self.handle
     }
 
     pub fn parent_swapchain(&self) -> Option<Arc<Swapchain>> {
