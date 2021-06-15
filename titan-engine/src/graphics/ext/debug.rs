@@ -2,22 +2,27 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::CStr;
 use std::os::raw::c_void;
-use std::sync::{Arc, Weak};
 
 use ash::extensions::ext::DebugUtils as AshDebugUtils;
 use ash::vk;
 use log::Level;
 
-use crate::graphics::instance::Instance;
+use crate::graphics::slotmap::{InstanceKey, SLOTMAP_INSTANCE};
+use crate::graphics::utils;
 
 pub struct DebugUtils {
     loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
-    parent_instance: Weak<Instance>,
+    parent_instance: InstanceKey,
 }
 
 impl DebugUtils {
-    pub fn new(instance: &Arc<Instance>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: InstanceKey) -> Result<Self, Box<dyn Error>> {
+        let slotmap = SLOTMAP_INSTANCE.read()?;
+        let instance = slotmap
+            .get(instance_key)
+            .ok_or_else(|| utils::make_error("instance not found"))?;
+
         let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
             .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
@@ -25,15 +30,16 @@ impl DebugUtils {
         let loader = AshDebugUtils::new(instance.entry_loader(), instance.loader());
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
+
         Ok(Self {
             loader,
             messenger,
-            parent_instance: Arc::downgrade(instance),
+            parent_instance: instance_key,
         })
     }
 
-    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
-        self.parent_instance.upgrade()
+    pub fn parent_instance(&self) -> InstanceKey {
+        self.parent_instance
     }
 
     pub fn name() -> &'static CStr {

@@ -1,25 +1,30 @@
 use std::error::Error;
-use std::sync::{Arc, Weak};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::Device;
+use super::slotmap::{DeviceKey, SLOTMAP_DEVICE};
+use super::utils;
 
 pub struct Framebuffer {
     handle: vk::Framebuffer,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
 }
 
 impl Framebuffer {
     pub unsafe fn new(
-        device: &Arc<Device>,
+        device_key: DeviceKey,
         create_info: &vk::FramebufferCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         let handle = device.loader().create_framebuffer(create_info, None)?;
         Ok(Self {
             handle,
-            parent_device: Arc::downgrade(device),
+            parent_device: device_key,
         })
     }
 
@@ -27,14 +32,18 @@ impl Framebuffer {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 }
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
-        let device = match self.parent_device() {
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(self.parent_device()) {
             None => return,
             Some(value) => value,
         };

@@ -2,18 +2,19 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::Arc;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash_window::enumerate_required_extensions;
-use raw_window_handle::HasRawWindowHandle;
 
 use crate::config::{Config, Version, ENGINE_NAME, ENGINE_VERSION};
 
 use super::device::PhysicalDevice;
 use super::ext::DebugUtils;
+use super::slotmap::InstanceKey;
 use super::utils;
+
+use winit::window::Window;
 
 lazy_static::lazy_static! {
     static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
@@ -22,6 +23,7 @@ lazy_static::lazy_static! {
 pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
+    key: InstanceKey,
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
@@ -30,10 +32,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(
-        config: &Config,
-        window_handle: &dyn HasRawWindowHandle,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(key: InstanceKey, config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {
@@ -77,7 +76,7 @@ impl Instance {
         }
 
         // Push extensions' names for surface
-        let surface_extensions_names = enumerate_required_extensions(window_handle)?;
+        let surface_extensions_names = enumerate_required_extensions(window)?;
         enabled_extension_names.extend(surface_extensions_names.into_iter());
 
         // Initialize instance create info and get an instance
@@ -113,6 +112,7 @@ impl Instance {
             .collect();
 
         Ok(Self {
+            key,
             entry_loader,
             instance_loader,
             version,
@@ -137,13 +137,11 @@ impl Instance {
         self.loader().handle()
     }
 
-    pub fn enumerate_physical_devices(
-        this: &Arc<Self>,
-    ) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
-        let handles = unsafe { this.instance_loader.enumerate_physical_devices()? };
+    pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
+        let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
         handles
-            .iter()
-            .map(|handle| unsafe { PhysicalDevice::new(this, *handle) })
+            .into_iter()
+            .map(|handle| unsafe { PhysicalDevice::new(self.key, handle) })
             .collect()
     }
 }

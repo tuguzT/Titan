@@ -1,39 +1,35 @@
 use std::error::Error;
-use std::sync::{Arc, Weak};
 
 use ash::vk;
 use ash_window::create_surface;
-use raw_window_handle::HasRawWindowHandle;
 
-use super::Instance;
+use super::slotmap::{InstanceKey, SLOTMAP_INSTANCE};
+use super::utils;
 use super::PhysicalDevice;
+use winit::window::Window;
 
 type SurfaceLoader = ash::extensions::khr::Surface;
 
 pub struct Surface {
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
-    parent_instance: Weak<Instance>,
+    parent_instance: InstanceKey,
 }
 
 impl Surface {
-    pub fn new(
-        instance: &Arc<Instance>,
-        window_handle: &dyn HasRawWindowHandle,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: InstanceKey, window: &Window) -> Result<Self, Box<dyn Error>> {
+        let slotmap = SLOTMAP_INSTANCE.read()?;
+        let instance = slotmap
+            .get(instance_key)
+            .ok_or_else(|| utils::make_error("instance not found"))?;
+
         let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
-        let handle = unsafe {
-            create_surface(
-                instance.entry_loader(),
-                instance.loader(),
-                window_handle,
-                None,
-            )
-        }?;
+        let handle =
+            unsafe { create_surface(instance.entry_loader(), instance.loader(), window, None) }?;
         Ok(Self {
             loader,
             handle,
-            parent_instance: Arc::downgrade(instance),
+            parent_instance: instance_key,
         })
     }
 
@@ -41,8 +37,8 @@ impl Surface {
         self.handle
     }
 
-    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
-        self.parent_instance.upgrade()
+    pub fn parent_instance(&self) -> InstanceKey {
+        self.parent_instance
     }
 
     pub fn physical_device_capabilities(

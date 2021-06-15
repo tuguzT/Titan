@@ -65,7 +65,10 @@ impl Window {
                     if let Err(error) = renderer.wait() {
                         log::error!("{}", error);
                     }
-                    unsafe { ManuallyDrop::drop(&mut renderer) };
+                    unsafe {
+                        ManuallyDrop::drop(&mut renderer);
+                        crate::graphics::slotmap::destroy();
+                    }
                     log::info!(target: "titan_engine::window", "closing this application");
                 }
                 _ => (),

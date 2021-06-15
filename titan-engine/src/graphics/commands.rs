@@ -1,26 +1,33 @@
 use std::error::Error;
-use std::sync::{Arc, Weak};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
+use super::slotmap::{CommandPoolKey, DeviceKey, SLOTMAP_COMMAND_POOL, SLOTMAP_DEVICE};
 use super::utils;
-use super::Device;
 
 pub struct CommandPool {
+    key: CommandPoolKey,
     handle: vk::CommandPool,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
 }
 
 impl CommandPool {
     pub unsafe fn new(
-        device: &Arc<Device>,
+        key: CommandPoolKey,
+        device_key: DeviceKey,
         create_info: &vk::CommandPoolCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         let handle = device.loader().create_command_pool(create_info, None)?;
         Ok(Self {
+            key,
             handle,
-            parent_device: Arc::downgrade(device),
+            parent_device: device_key,
         })
     }
 
@@ -28,19 +35,22 @@ impl CommandPool {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 
     pub fn enumerate_command_buffers(
-        this: &Arc<Self>,
+        &self,
         count: u32,
     ) -> Result<Vec<CommandBuffer>, Box<dyn Error>> {
-        let device = this
-            .parent_device()
+        let device_key = self.parent_device();
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
             .ok_or_else(|| utils::make_error("parent was lost"))?;
+
         let allocate_info = vk::CommandBufferAllocateInfo::builder()
-            .command_pool(this.handle())
+            .command_pool(self.handle())
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(count);
         Ok(unsafe {
@@ -48,7 +58,7 @@ impl CommandPool {
                 .loader()
                 .allocate_command_buffers(&allocate_info)?
                 .into_iter()
-                .map(|command_buffer| CommandBuffer::new(this, command_buffer))
+                .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
                 .collect()
         })
     }
@@ -56,7 +66,12 @@ impl CommandPool {
 
 impl Drop for CommandPool {
     fn drop(&mut self) {
-        let device = match self.parent_device() {
+        let slotmap_device = SLOTMAP_DEVICE.read();
+        let slotmap_device = match slotmap_device {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(self.parent_device()) {
             None => return,
             Some(value) => value,
         };
@@ -66,19 +81,19 @@ impl Drop for CommandPool {
 
 pub struct CommandBuffer {
     handle: vk::CommandBuffer,
-    parent_command_pool: Weak<CommandPool>,
+    parent_command_pool: CommandPoolKey,
 }
 
 impl CommandBuffer {
-    unsafe fn new(command_pool: &Arc<CommandPool>, handle: vk::CommandBuffer) -> Self {
+    unsafe fn new(command_pool_key: CommandPoolKey, handle: vk::CommandBuffer) -> Self {
         Self {
             handle,
-            parent_command_pool: Arc::downgrade(command_pool),
+            parent_command_pool: command_pool_key,
         }
     }
 
-    pub fn parent_command_pool(&self) -> Option<Arc<CommandPool>> {
-        self.parent_command_pool.upgrade()
+    pub fn parent_command_pool(&self) -> CommandPoolKey {
+        self.parent_command_pool
     }
 
     pub fn handle(&self) -> vk::CommandBuffer {
@@ -89,24 +104,32 @@ impl CommandBuffer {
         &self,
         begin_info: &vk::CommandBufferBeginInfo,
     ) -> Result<(), Box<dyn Error>> {
-        let command_pool = self
-            .parent_command_pool()
+        let slotmap_command_pool = SLOTMAP_COMMAND_POOL.read()?;
+        let command_pool = slotmap_command_pool
+            .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
-        let device = command_pool
-            .parent_device()
+
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+
         Ok(device
             .loader()
             .begin_command_buffer(self.handle, begin_info)?)
     }
 
     pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
-        let command_pool = self
-            .parent_command_pool()
+        let slotmap_command_pool = SLOTMAP_COMMAND_POOL.read()?;
+        let command_pool = slotmap_command_pool
+            .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
-        let device = command_pool
-            .parent_device()
+
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+
         Ok(device.loader().end_command_buffer(self.handle)?)
     }
 }

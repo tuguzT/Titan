@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::io::Cursor;
-use std::sync::{Arc, Weak};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::Device;
+use super::slotmap::{DeviceKey, SLOTMAP_DEVICE};
+use super::utils;
 
 pub const VERT_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/vert.spv");
 pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/frag.spv");
@@ -13,18 +13,23 @@ pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/fra
 pub struct ShaderModule {
     handle: vk::ShaderModule,
     code: Vec<u32>,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
 }
 
 impl ShaderModule {
-    pub fn new(device: &Arc<Device>, code: &[u8]) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device_key: DeviceKey, code: &[u8]) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         let code = ash::util::read_spv(&mut Cursor::new(code))?;
         let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_slice());
         let handle = unsafe { device.loader().create_shader_module(&create_info, None)? };
         Ok(Self {
             handle,
-            code: code.to_owned(),
-            parent_device: Arc::downgrade(device),
+            code,
+            parent_device: device_key,
         })
     }
 
@@ -36,14 +41,18 @@ impl ShaderModule {
         self.code.as_slice()
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 }
 
 impl Drop for ShaderModule {
     fn drop(&mut self) {
-        let device = match self.parent_device() {
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(self.parent_device()) {
             None => return,
             Some(value) => value,
         };

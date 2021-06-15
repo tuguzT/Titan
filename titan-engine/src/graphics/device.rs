@@ -4,16 +4,18 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::{Arc, Weak};
 
 use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
 use super::ext::Swapchain;
+use super::slotmap::{
+    InstanceKey, SLOTMAP_DEVICE, SLOTMAP_INSTANCE, SLOTMAP_PHYSICAL_DEVICE, SLOTMAP_SURFACE,
+};
 use super::utils;
-use super::Instance;
 use super::Surface;
+use crate::graphics::slotmap::{DeviceKey, PhysicalDeviceKey, SurfaceKey};
 
 lazy_static::lazy_static! {
     static ref REQUIRED_EXTENSIONS: Vec<&'static CStr> = vec![Swapchain::name()];
@@ -27,14 +29,19 @@ pub struct PhysicalDevice {
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
     handle: vk::PhysicalDevice,
-    parent_instance: Weak<Instance>,
+    parent_instance: InstanceKey,
 }
 
 impl PhysicalDevice {
     pub unsafe fn new(
-        instance: &Arc<Instance>,
+        instance_key: InstanceKey,
         handle: vk::PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let instance = slotmap_instance
+            .get(instance_key)
+            .ok_or_else(|| utils::make_error("instance not found"))?;
+
         let properties = instance.loader().get_physical_device_properties(handle);
         let features = instance.loader().get_physical_device_features(handle);
         let memory_properties = instance
@@ -56,7 +63,7 @@ impl PhysicalDevice {
             memory_properties,
             layer_properties,
             extension_properties,
-            parent_instance: Arc::downgrade(instance),
+            parent_instance: instance_key,
         })
     }
 
@@ -64,8 +71,8 @@ impl PhysicalDevice {
         self.handle
     }
 
-    pub fn parent_instance(&self) -> Option<Arc<Instance>> {
-        self.parent_instance.upgrade()
+    pub fn parent_instance(&self) -> InstanceKey {
+        self.parent_instance
     }
 
     pub fn is_suitable(&self) -> bool {
@@ -183,28 +190,41 @@ unsafe fn enumerate_device_layer_properties(
 }
 
 pub struct Device {
+    key: DeviceKey,
     loader: ash::Device,
     queue_create_infos: Vec<vk::DeviceQueueCreateInfo>,
-    parent_physical_device: Weak<PhysicalDevice>,
+    parent_physical_device: PhysicalDeviceKey,
 }
+
+unsafe impl Send for Device {}
+unsafe impl Sync for Device {}
 
 impl Device {
     pub fn new(
-        surface: &Surface,
-        physical_device: &Arc<PhysicalDevice>,
+        key: DeviceKey,
+        surface_key: SurfaceKey,
+        physical_device_key: PhysicalDeviceKey,
     ) -> Result<Self, Box<dyn Error>> {
-        let surface_instance = surface
-            .parent_instance()
-            .ok_or_else(|| utils::make_error("surface parent was lost"))?;
-        let physical_device_instance = physical_device
-            .parent_instance()
-            .ok_or_else(|| utils::make_error("physical device parent was lost"))?;
-        if surface_instance.handle() != physical_device_instance.handle() {
+        let slotmap_surface = SLOTMAP_SURFACE.read()?;
+        let surface = slotmap_surface
+            .get(surface_key)
+            .ok_or_else(|| utils::make_error("surface not found"))?;
+        let slotmap_physical_device = SLOTMAP_PHYSICAL_DEVICE.read()?;
+        let physical_device = slotmap_physical_device
+            .get(physical_device_key)
+            .ok_or_else(|| utils::make_error("physical device not found"))?;
+
+        let surface_instance = surface.parent_instance();
+        let physical_device_instance = physical_device.parent_instance();
+        if surface_instance != physical_device_instance {
             return Err(
                 utils::make_error("surface and physical device parents must be the same").into(),
             );
         }
-        let instance = surface_instance;
+        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let instance = slotmap_instance
+            .get(surface_instance)
+            .ok_or_else(|| utils::make_error("instance not found"))?;
 
         let mut unique_family_indices = HashSet::new();
         unique_family_indices.insert(physical_device.graphics_family_index()?);
@@ -248,9 +268,10 @@ impl Device {
         };
 
         Ok(Self {
+            key,
             queue_create_infos,
             loader,
-            parent_physical_device: Arc::downgrade(physical_device),
+            parent_physical_device: physical_device_key,
         })
     }
 
@@ -262,21 +283,24 @@ impl Device {
         self.loader.handle()
     }
 
-    pub fn parent_physical_device(&self) -> Option<Arc<PhysicalDevice>> {
-        self.parent_physical_device.upgrade()
+    pub fn parent_physical_device(&self) -> PhysicalDeviceKey {
+        self.parent_physical_device
     }
 
-    pub fn enumerate_queues(this: &Arc<Self>) -> Vec<Queue> {
+    pub fn enumerate_queues(&self) -> Result<Vec<Queue>, Box<dyn Error>> {
         let mut queues = Vec::new();
-        for create_info in this.queue_create_infos.iter() {
+        for create_info in self.queue_create_infos.iter() {
             let range = 0..create_info.queue_count;
-            queues.extend(
-                range.map(|index| unsafe {
-                    Queue::new(this, create_info.queue_family_index, index)
-                }),
-            );
+            let vector: Result<Vec<_>, _> = range
+                .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
+                .collect();
+            if let Ok(vector) = vector {
+                queues.extend(vector.into_iter())
+            } else {
+                return Err(utils::make_error("WTF!!!").into());
+            }
         }
-        queues
+        Ok(queues)
     }
 }
 
@@ -289,24 +313,32 @@ impl Drop for Device {
 pub struct Queue {
     family_index: u32,
     handle: vk::Queue,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
 }
 
 impl Queue {
-    unsafe fn new(device: &Arc<Device>, family_index: u32, index: u32) -> Self {
+    unsafe fn new(
+        device_key: DeviceKey,
+        family_index: u32,
+        index: u32,
+    ) -> Result<Self, Box<dyn Error>> {
+        let slotmap = SLOTMAP_DEVICE.read()?;
+        let device = slotmap
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
         let handle = device.loader().get_device_queue(family_index, index);
-        Self {
+        Ok(Self {
             family_index,
             handle,
-            parent_device: Arc::downgrade(device),
-        }
+            parent_device: device_key,
+        })
     }
 
     pub fn handle(&self) -> vk::Queue {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 }

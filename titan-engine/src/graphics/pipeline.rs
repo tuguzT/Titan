@@ -1,44 +1,59 @@
 use std::error::Error;
-use std::sync::{Arc, Weak};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::ext::Swapchain;
 use super::shaders::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE};
+use super::slotmap::{
+    DeviceKey, PipelineLayoutKey, RenderPassKey, SwapchainKey, SLOTMAP_DEVICE,
+    SLOTMAP_PIPELINE_LAYOUT, SLOTMAP_RENDER_PASS, SLOTMAP_SWAPCHAIN,
+};
 use super::utils;
 use super::CommandBuffer;
-use super::Device;
 
 pub struct GraphicsPipeline {
     handle: vk::Pipeline,
-    parent_render_pass: Weak<RenderPass>,
-    parent_pipeline_layout: Weak<PipelineLayout>,
+    parent_render_pass: RenderPassKey,
+    parent_pipeline_layout: PipelineLayoutKey,
 }
 
 impl GraphicsPipeline {
     pub fn new(
-        render_pass: &Arc<RenderPass>,
-        pipeline_layout: &Arc<PipelineLayout>,
+        render_pass_key: RenderPassKey,
+        pipeline_layout_key: PipelineLayoutKey,
     ) -> Result<Self, Box<dyn Error>> {
-        let pipeline_layout_device = pipeline_layout
-            .parent_device()
-            .ok_or_else(|| utils::make_error("pipeline layout parent was lost"))?;
-        let swapchain = render_pass
-            .parent_swapchain()
-            .ok_or_else(|| utils::make_error("render pass parent was lost"))?;
-        let device = swapchain
-            .parent_device()
-            .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
-        if device.handle() != pipeline_layout_device.handle() {
+        let slotmap_pipeline_layout = SLOTMAP_PIPELINE_LAYOUT.read()?;
+        let pipeline_layout = slotmap_pipeline_layout
+            .get(pipeline_layout_key)
+            .ok_or_else(|| utils::make_error("pipeline layout not found"))?;
+
+        let slotmap_render_pass = SLOTMAP_RENDER_PASS.read()?;
+        let render_pass = slotmap_render_pass
+            .get(render_pass_key)
+            .ok_or_else(|| utils::make_error("render pass not found"))?;
+
+        let swapchain_key = render_pass.parent_swapchain();
+        let slotmap_swapchain = SLOTMAP_SWAPCHAIN.read()?;
+        let render_pass_swapchain = slotmap_swapchain
+            .get(swapchain_key)
+            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+
+        let render_pass_device = render_pass_swapchain.parent_device();
+        let pipeline_layout_device = pipeline_layout.parent_device();
+        if render_pass_device != pipeline_layout_device {
             return Err(utils::make_error(
                 "pipeline layout and render pass must have the same parent",
             )
             .into());
         }
+        let device_key = render_pass_device;
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
 
-        let vert_shader_module = ShaderModule::new(&device, VERT_SHADER_CODE)?;
-        let frag_shader_module = ShaderModule::new(&device, FRAG_SHADER_CODE)?;
+        let vert_shader_module = ShaderModule::new(device_key, VERT_SHADER_CODE)?;
+        let frag_shader_module = ShaderModule::new(device_key, FRAG_SHADER_CODE)?;
 
         let shader_stage_info_name = crate::c_str!("main");
         let vert_shader_stage_info = vk::PipelineShaderStageCreateInfo::builder()
@@ -59,13 +74,13 @@ impl GraphicsPipeline {
         let viewport = vk::Viewport {
             x: 0.0,
             y: 0.0,
-            width: swapchain.extent().width as f32,
-            height: swapchain.extent().height as f32,
+            width: render_pass_swapchain.extent().width as f32,
+            height: render_pass_swapchain.extent().height as f32,
             min_depth: 0.0,
             max_depth: 1.0,
         };
         let viewports = [viewport];
-        let scissor = vk::Rect2D::builder().extent(swapchain.extent());
+        let scissor = vk::Rect2D::builder().extent(render_pass_swapchain.extent());
         let scissors = [*scissor];
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
             .viewports(&viewports)
@@ -130,8 +145,8 @@ impl GraphicsPipeline {
             .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
         Ok(Self {
             handle,
-            parent_render_pass: Arc::downgrade(render_pass),
-            parent_pipeline_layout: Arc::downgrade(pipeline_layout),
+            parent_render_pass: render_pass_key,
+            parent_pipeline_layout: pipeline_layout_key,
         })
     }
 
@@ -139,26 +154,40 @@ impl GraphicsPipeline {
         self.handle
     }
 
-    pub fn parent_render_pass(&self) -> Option<Arc<RenderPass>> {
-        self.parent_render_pass.upgrade()
+    pub fn parent_render_pass(&self) -> RenderPassKey {
+        self.parent_render_pass
     }
 
-    pub fn parent_pipeline_layout(&self) -> Option<Arc<PipelineLayout>> {
-        self.parent_pipeline_layout.upgrade()
+    pub fn parent_pipeline_layout(&self) -> PipelineLayoutKey {
+        self.parent_pipeline_layout
     }
 }
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
-        let render_pass = match self.parent_render_pass() {
+        let slotmap_render_pass = match SLOTMAP_RENDER_PASS.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let render_pass = match slotmap_render_pass.get(self.parent_render_pass()) {
             None => return,
             Some(value) => value,
         };
-        let swapchain = match render_pass.parent_swapchain() {
+
+        let slotmap_swapchain = match SLOTMAP_SWAPCHAIN.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let swapchain = match slotmap_swapchain.get(render_pass.parent_swapchain()) {
             None => return,
             Some(value) => value,
         };
-        let device = match swapchain.parent_device() {
+
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(swapchain.parent_device()) {
             None => return,
             Some(value) => value,
         };
@@ -168,38 +197,47 @@ impl Drop for GraphicsPipeline {
 
 pub struct PipelineLayout {
     handle: vk::PipelineLayout,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
 }
 
 impl PipelineLayout {
     pub unsafe fn with(
-        device: &Arc<Device>,
+        device_key: DeviceKey,
         create_info: &vk::PipelineLayoutCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         let handle = device.loader().create_pipeline_layout(create_info, None)?;
         Ok(Self {
             handle,
-            parent_device: Arc::downgrade(device),
+            parent_device: device_key,
         })
     }
 
-    pub fn new(device: &Arc<Device>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device_key: DeviceKey) -> Result<Self, Box<dyn Error>> {
         let create_info = vk::PipelineLayoutCreateInfo::default();
-        unsafe { Self::with(device, &create_info) }
+        unsafe { Self::with(device_key, &create_info) }
     }
 
     pub fn handle(&self) -> vk::PipelineLayout {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 }
 
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
-        let device = match self.parent_device() {
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(self.parent_device()) {
             None => return,
             Some(value) => value,
         };
@@ -209,14 +247,21 @@ impl Drop for PipelineLayout {
 
 pub struct RenderPass {
     handle: vk::RenderPass,
-    parent_swapchain: Weak<Swapchain>,
+    parent_swapchain: SwapchainKey,
 }
 
 impl RenderPass {
-    pub fn new(swapchain: &Arc<Swapchain>) -> Result<Self, Box<dyn Error>> {
-        let device = swapchain
-            .parent_device()
-            .ok_or_else(|| utils::make_error("device parent was lost"))?;
+    pub fn new(swapchain_key: SwapchainKey) -> Result<Self, Box<dyn Error>> {
+        let slotmap_swapchain = SLOTMAP_SWAPCHAIN.read()?;
+        let swapchain = slotmap_swapchain
+            .get(swapchain_key)
+            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+
+        let device_key = swapchain.parent_device();
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
 
         let color_attachment = vk::AttachmentDescription::builder()
             .format(swapchain.format().format)
@@ -255,7 +300,7 @@ impl RenderPass {
         let handle = unsafe { device.loader().create_render_pass(&create_info, None)? };
         Ok(Self {
             handle,
-            parent_swapchain: Arc::downgrade(swapchain),
+            parent_swapchain: swapchain_key,
         })
     }
 
@@ -263,8 +308,8 @@ impl RenderPass {
         self.handle
     }
 
-    pub fn parent_swapchain(&self) -> Option<Arc<Swapchain>> {
-        self.parent_swapchain.upgrade()
+    pub fn parent_swapchain(&self) -> SwapchainKey {
+        self.parent_swapchain
     }
 
     pub unsafe fn begin(
@@ -273,38 +318,62 @@ impl RenderPass {
         begin_info: &vk::RenderPassBeginInfo,
         contents: vk::SubpassContents,
     ) -> Result<(), Box<dyn Error>> {
-        let swapchain = self
-            .parent_swapchain()
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
-        let device = swapchain
-            .parent_device()
-            .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
+        let swapchain_key = self.parent_swapchain();
+        let slotmap_swapchain = SLOTMAP_SWAPCHAIN.read()?;
+        let swapchain = slotmap_swapchain
+            .get(swapchain_key)
+            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+
+        let device_key = swapchain.parent_device();
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         Ok(device
             .loader()
             .cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
     }
 
     pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<(), Box<dyn Error>> {
-        let swapchain = self
-            .parent_swapchain()
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
-        let device = swapchain
-            .parent_device()
-            .ok_or_else(|| utils::make_error("swapchain parent was lost"))?;
+        let swapchain_key = self.parent_swapchain();
+        let slotmap_swapchain = SLOTMAP_SWAPCHAIN.read()?;
+        let swapchain = slotmap_swapchain
+            .get(swapchain_key)
+            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+
+        let device_key = swapchain.parent_device();
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         Ok(device.loader().cmd_end_render_pass(command_buffer.handle()))
     }
 }
 
 impl Drop for RenderPass {
     fn drop(&mut self) {
-        let swapchain = match self.parent_swapchain() {
+        let swapchain_key = self.parent_swapchain();
+        let slotmap_swapchain = match SLOTMAP_SWAPCHAIN.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let swapchain = match slotmap_swapchain.get(swapchain_key) {
             None => return,
             Some(value) => value,
         };
-        let device = match swapchain.parent_device() {
+
+        let device_key = swapchain.parent_device();
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(device_key) {
             None => return,
             Some(value) => value,
         };
+
         unsafe { device.loader().destroy_render_pass(self.handle, None) }
     }
 }

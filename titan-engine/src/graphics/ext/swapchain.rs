@@ -1,12 +1,15 @@
 use std::borrow::Borrow;
 use std::error::Error;
 use std::ffi::CStr;
-use std::sync::{Arc, Weak};
 
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 
-use crate::graphics::{utils, Device, Image, Surface};
+use crate::graphics::slotmap::{
+    DeviceKey, SurfaceKey, SLOTMAP_DEVICE, SLOTMAP_INSTANCE, SLOTMAP_PHYSICAL_DEVICE,
+    SLOTMAP_SURFACE,
+};
+use crate::graphics::{utils, Image};
 use crate::impl_window::Window;
 
 pub struct Swapchain {
@@ -14,40 +17,52 @@ pub struct Swapchain {
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
     loader: AshSwapchain,
-    parent_device: Weak<Device>,
-    parent_surface: Weak<Surface>,
+    parent_device: DeviceKey,
+    parent_surface: SurfaceKey,
 }
 
 impl Swapchain {
     pub fn new(
         window: &Window,
-        device: &Arc<Device>,
-        surface: &Arc<Surface>,
+        device_key: DeviceKey,
+        surface_key: SurfaceKey,
     ) -> Result<Self, Box<dyn Error>> {
-        let physical_device = device
-            .parent_physical_device()
-            .ok_or_else(|| utils::make_error("device parent was lost"))?;
-        let surface_instance = surface
-            .parent_instance()
-            .ok_or_else(|| utils::make_error("surface parent was lost"))?;
-        let physical_device_instance = physical_device
-            .parent_instance()
-            .ok_or_else(|| utils::make_error("physical device parent was lost"))?;
-        if surface_instance.handle() != physical_device_instance.handle() {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_surface = SLOTMAP_SURFACE.read()?;
+        let surface = slotmap_surface
+            .get(surface_key)
+            .ok_or_else(|| utils::make_error("surface not found"))?;
+
+        let physical_device_key = device.parent_physical_device();
+        let slotmap_physical_device = SLOTMAP_PHYSICAL_DEVICE.read()?;
+        let physical_device = slotmap_physical_device
+            .get(physical_device_key)
+            .ok_or_else(|| utils::make_error("physical device not found"))?;
+
+        let surface_instance = surface.parent_instance();
+        let physical_device_instance = physical_device.parent_instance();
+        if surface_instance != physical_device_instance {
             return Err(
                 utils::make_error("surface and physical device parents must be the same").into(),
             );
         }
-        let instance = surface_instance;
 
-        let formats = surface.physical_device_formats(&physical_device)?;
+        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let instance = slotmap_instance
+            .get(surface_instance)
+            .ok_or_else(|| utils::make_error("instance not found"))?;
+
+        let formats = surface.physical_device_formats(physical_device)?;
         let suitable_format = Self::pick_format(&formats)
             .ok_or_else(|| utils::make_error("no suitable format found"))?;
 
-        let present_modes = surface.physical_device_present_modes(&physical_device)?;
+        let present_modes = surface.physical_device_present_modes(physical_device)?;
         let suitable_present_mode = Self::pick_present_mode(&present_modes);
 
-        let capabilities = surface.physical_device_capabilities(&physical_device)?;
+        let capabilities = surface.physical_device_capabilities(physical_device)?;
         let suitable_extent = Self::pick_extent(window, &capabilities);
 
         let mut image_count = capabilities.min_image_count + 1;
@@ -67,7 +82,7 @@ impl Swapchain {
             .present_mode(*suitable_present_mode)
             .clipped(true);
         let graphics_index = physical_device.graphics_family_index()?;
-        let present_index = physical_device.present_family_index(&surface)?;
+        let present_index = physical_device.present_family_index(surface)?;
         let queue_family_indices = [graphics_index, present_index];
         if graphics_index != present_index {
             create_info = create_info
@@ -84,8 +99,8 @@ impl Swapchain {
             handle,
             format: *suitable_format,
             extent: suitable_extent,
-            parent_device: Arc::downgrade(device),
-            parent_surface: Arc::downgrade(surface),
+            parent_device: device_key,
+            parent_surface: surface_key,
         })
     }
 
@@ -97,12 +112,12 @@ impl Swapchain {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 
-    pub fn parent_surface(&self) -> Option<Arc<Surface>> {
-        self.parent_surface.upgrade()
+    pub fn parent_surface(&self) -> SurfaceKey {
+        self.parent_surface
     }
 
     pub fn format(&self) -> vk::SurfaceFormatKHR {
@@ -113,14 +128,12 @@ impl Swapchain {
         self.extent
     }
 
-    pub fn enumerate_images(this: &Arc<Self>) -> Result<Vec<Image>, Box<dyn Error>> {
-        let device = this
-            .parent_device()
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
-        let handles = unsafe { this.loader.get_swapchain_images(this.handle)? };
+    pub fn enumerate_images(&self) -> Result<Vec<Image>, Box<dyn Error>> {
+        let device = self.parent_device();
+        let handles = unsafe { self.loader.get_swapchain_images(self.handle)? };
         Ok(handles
             .into_iter()
-            .map(|handle| unsafe { Image::from_raw(&device, handle) })
+            .map(|handle| unsafe { Image::from_raw(device, handle) })
             .collect())
     }
 

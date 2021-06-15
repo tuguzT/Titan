@@ -1,35 +1,38 @@
 use std::error::Error;
-use std::sync::{Arc, Weak};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
+use super::slotmap::{DeviceKey, ImageKey, SLOTMAP_DEVICE, SLOTMAP_IMAGE};
 use super::utils;
-use super::Device;
 
 pub struct Image {
     handle: vk::Image,
-    parent_device: Weak<Device>,
+    parent_device: DeviceKey,
     owned: bool,
 }
 
 impl Image {
     pub unsafe fn new(
-        device: &Arc<Device>,
+        device_key: DeviceKey,
         create_info: &vk::ImageCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
         let handle = device.loader().create_image(create_info, None)?;
         Ok(Self {
             handle,
-            parent_device: Arc::downgrade(device),
+            parent_device: device_key,
             owned: false,
         })
     }
 
-    pub unsafe fn from_raw(device: &Arc<Device>, handle: vk::Image) -> Self {
+    pub unsafe fn from_raw(device_key: DeviceKey, handle: vk::Image) -> Self {
         Self {
             handle,
-            parent_device: Arc::downgrade(device),
+            parent_device: device_key,
             owned: true,
         }
     }
@@ -38,45 +41,57 @@ impl Image {
         self.handle
     }
 
-    pub fn parent_device(&self) -> Option<Arc<Device>> {
-        self.parent_device.upgrade()
+    pub fn parent_device(&self) -> DeviceKey {
+        self.parent_device
     }
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
-        let parent_device = match self.parent_device() {
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(self.parent_device()) {
             None => return,
             Some(value) => value,
         };
         if !self.owned {
-            unsafe { parent_device.loader().destroy_image(self.handle, None) }
+            unsafe { device.loader().destroy_image(self.handle, None) }
         }
     }
 }
 
 pub struct ImageView {
     handle: vk::ImageView,
-    parent_image: Weak<Image>,
+    parent_image: ImageKey,
 }
 
 impl ImageView {
     pub unsafe fn new(
-        image: &Arc<Image>,
+        image_key: ImageKey,
         create_info: &vk::ImageViewCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let device = image
-            .parent_device()
-            .ok_or_else(|| utils::make_error("image parent was lost"))?;
+        let slotmap_image = SLOTMAP_IMAGE.read()?;
+        let image = slotmap_image
+            .get(image_key)
+            .ok_or_else(|| utils::make_error("image not found"))?;
+
+        let device_key = image.parent_device();
+        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let device = slotmap_device
+            .get(device_key)
+            .ok_or_else(|| utils::make_error("device not found"))?;
+
         let handle = device.loader().create_image_view(create_info, None)?;
         Ok(Self {
             handle,
-            parent_image: Arc::downgrade(image),
+            parent_image: image_key,
         })
     }
 
-    pub fn parent_image(&self) -> Option<Arc<Image>> {
-        self.parent_image.upgrade()
+    pub fn parent_image(&self) -> ImageKey {
+        self.parent_image
     }
 
     pub fn handle(&self) -> vk::ImageView {
@@ -86,14 +101,24 @@ impl ImageView {
 
 impl Drop for ImageView {
     fn drop(&mut self) {
-        let parent_image = match self.parent_image() {
+        let slotmap_image = match SLOTMAP_IMAGE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let image = match slotmap_image.get(self.parent_image()) {
             None => return,
             Some(value) => value,
         };
-        let parent_device = match parent_image.parent_device() {
+
+        let slotmap_device = match SLOTMAP_DEVICE.read() {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let device = match slotmap_device.get(image.parent_device()) {
             None => return,
             Some(value) => value,
         };
-        unsafe { parent_device.loader().destroy_image_view(self.handle, None) }
+
+        unsafe { device.loader().destroy_image_view(self.handle, None) }
     }
 }
