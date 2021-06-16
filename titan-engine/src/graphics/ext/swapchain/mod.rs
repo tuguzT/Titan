@@ -4,40 +4,40 @@ use std::ffi::CStr;
 
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
+use winit::window::Window;
 
-use crate::graphics::slotmap::{
-    DeviceKey, SurfaceKey, SLOTMAP_DEVICE, SLOTMAP_INSTANCE, SLOTMAP_PHYSICAL_DEVICE,
-    SLOTMAP_SURFACE,
-};
 use crate::graphics::{utils, Image};
-use crate::impl_window::Window;
+
+use super::super::{device, instance, surface};
+
+pub mod slotmap;
 
 pub struct Swapchain {
     handle: vk::SwapchainKHR,
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
     loader: AshSwapchain,
-    parent_device: DeviceKey,
-    parent_surface: SurfaceKey,
+    parent_device: device::logical::slotmap::Key,
+    parent_surface: surface::slotmap::Key,
 }
 
 impl Swapchain {
     pub fn new(
         window: &Window,
-        device_key: DeviceKey,
-        surface_key: SurfaceKey,
+        device_key: device::logical::slotmap::Key,
+        surface_key: surface::slotmap::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
-        let slotmap_surface = SLOTMAP_SURFACE.read()?;
+        let slotmap_surface = surface::slotmap::read()?;
         let surface = slotmap_surface
             .get(surface_key)
             .ok_or_else(|| utils::make_error("surface not found"))?;
 
         let physical_device_key = device.parent_physical_device();
-        let slotmap_physical_device = SLOTMAP_PHYSICAL_DEVICE.read()?;
+        let slotmap_physical_device = device::physical::slotmap::read()?;
         let physical_device = slotmap_physical_device
             .get(physical_device_key)
             .ok_or_else(|| utils::make_error("physical device not found"))?;
@@ -50,7 +50,7 @@ impl Swapchain {
             );
         }
 
-        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let slotmap_instance = instance::slotmap::read()?;
         let instance = slotmap_instance
             .get(surface_instance)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -112,11 +112,11 @@ impl Swapchain {
         self.handle
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> device::logical::slotmap::Key {
         self.parent_device
     }
 
-    pub fn parent_surface(&self) -> SurfaceKey {
+    pub fn parent_surface(&self) -> surface::slotmap::Key {
         self.parent_surface
     }
 
@@ -160,7 +160,7 @@ impl Swapchain {
         if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
-            let window_size = window.window().inner_size();
+            let window_size = window.inner_size();
             vk::Extent2D {
                 width: window_size.width.clamp(
                     capabilities.min_image_extent.width,

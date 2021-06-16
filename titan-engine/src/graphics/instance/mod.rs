@@ -1,20 +1,19 @@
 use std::error::Error;
 use std::ffi::{CStr, CString};
-use std::ops::Deref;
 use std::os::raw::c_char;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash_window::enumerate_required_extensions;
-
-use crate::config::{Config, Version, ENGINE_NAME, ENGINE_VERSION};
-
-use super::device::PhysicalDevice;
-use super::ext::DebugUtils;
-use super::slotmap::InstanceKey;
-use super::utils;
-
 use winit::window::Window;
+
+use crate::{
+    config::ENGINE_VERSION,
+    config::{Config, Version, ENGINE_NAME},
+    graphics::{device::PhysicalDevice, ext::debug_utils::DebugUtils, instance, utils},
+};
+
+pub mod slotmap;
 
 lazy_static::lazy_static! {
     static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
@@ -23,7 +22,7 @@ lazy_static::lazy_static! {
 pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
-    key: InstanceKey,
+    key: instance::slotmap::Key,
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
@@ -32,7 +31,11 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(key: InstanceKey, config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        key: instance::slotmap::Key,
+        config: &Config,
+        window: &Window,
+    ) -> Result<Self, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {
@@ -53,8 +56,8 @@ impl Instance {
         let application_info = vk::ApplicationInfo::builder()
             .application_version(application_version)
             .engine_version(engine_version)
-            .application_name(application_name.deref())
-            .engine_name(engine_name.deref())
+            .application_name(&application_name)
+            .engine_name(&engine_name)
             .api_version(vk::API_VERSION_1_2);
 
         // Initialize containers for layers' and extensions' names
@@ -89,7 +92,7 @@ impl Instance {
             .map(|item| item.as_ptr())
             .collect();
         let create_info = vk::InstanceCreateInfo::builder()
-            .application_info(application_info.deref())
+            .application_info(&application_info)
             .enabled_layer_names(p_enabled_layer_names.as_slice())
             .enabled_extension_names(p_enabled_extension_names.as_slice());
         let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };

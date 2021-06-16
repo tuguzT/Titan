@@ -7,18 +7,19 @@ use ash::extensions::ext::DebugUtils as AshDebugUtils;
 use ash::vk;
 use log::Level;
 
-use crate::graphics::slotmap::{InstanceKey, SLOTMAP_INSTANCE};
-use crate::graphics::utils;
+use super::super::{instance, utils};
+
+pub mod slotmap;
 
 pub struct DebugUtils {
     loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
-    parent_instance: InstanceKey,
+    parent_instance: instance::slotmap::Key,
 }
 
 impl DebugUtils {
-    pub fn new(instance_key: InstanceKey) -> Result<Self, Box<dyn Error>> {
-        let slotmap = SLOTMAP_INSTANCE.read()?;
+    pub fn new(instance_key: instance::slotmap::Key) -> Result<Self, Box<dyn Error>> {
+        let slotmap = instance::slotmap::read()?;
         let instance = slotmap
             .get(instance_key)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -38,7 +39,7 @@ impl DebugUtils {
         })
     }
 
-    pub fn parent_instance(&self) -> InstanceKey {
+    pub fn parent_instance(&self) -> instance::slotmap::Key {
         self.parent_instance
     }
 

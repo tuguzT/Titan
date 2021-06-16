@@ -1,5 +1,5 @@
 ### Rust
-debug/
+/root/debug/
 target/
 Cargo.lock
 **/*.rs.bk

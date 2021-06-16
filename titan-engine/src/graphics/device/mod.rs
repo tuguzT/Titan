@@ -9,13 +9,13 @@ use ash::prelude::VkResult;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
-use super::ext::Swapchain;
-use super::slotmap::{
-    InstanceKey, SLOTMAP_DEVICE, SLOTMAP_INSTANCE, SLOTMAP_PHYSICAL_DEVICE, SLOTMAP_SURFACE,
-};
-use super::utils;
+use super::ext::swapchain::Swapchain;
 use super::Surface;
-use crate::graphics::slotmap::{DeviceKey, PhysicalDeviceKey, SurfaceKey};
+use super::{instance, surface, utils};
+
+pub mod logical;
+pub mod physical;
+pub mod queue;
 
 lazy_static::lazy_static! {
     static ref REQUIRED_EXTENSIONS: Vec<&'static CStr> = vec![Swapchain::name()];
@@ -29,15 +29,15 @@ pub struct PhysicalDevice {
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
     handle: vk::PhysicalDevice,
-    parent_instance: InstanceKey,
+    parent_instance: instance::slotmap::Key,
 }
 
 impl PhysicalDevice {
     pub unsafe fn new(
-        instance_key: InstanceKey,
+        instance_key: instance::slotmap::Key,
         handle: vk::PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let slotmap_instance = instance::slotmap::read()?;
         let instance = slotmap_instance
             .get(instance_key)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -71,7 +71,7 @@ impl PhysicalDevice {
         self.handle
     }
 
-    pub fn parent_instance(&self) -> InstanceKey {
+    pub fn parent_instance(&self) -> instance::slotmap::Key {
         self.parent_instance
     }
 
@@ -190,26 +190,27 @@ unsafe fn enumerate_device_layer_properties(
 }
 
 pub struct Device {
-    key: DeviceKey,
+    key: logical::slotmap::Key,
     loader: ash::Device,
     queue_create_infos: Vec<vk::DeviceQueueCreateInfo>,
-    parent_physical_device: PhysicalDeviceKey,
+    parent_physical_device: physical::slotmap::Key,
 }
 
 unsafe impl Send for Device {}
+
 unsafe impl Sync for Device {}
 
 impl Device {
     pub fn new(
-        key: DeviceKey,
-        surface_key: SurfaceKey,
-        physical_device_key: PhysicalDeviceKey,
+        key: logical::slotmap::Key,
+        surface_key: surface::slotmap::Key,
+        physical_device_key: physical::slotmap::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_surface = SLOTMAP_SURFACE.read()?;
+        let slotmap_surface = surface::slotmap::read()?;
         let surface = slotmap_surface
             .get(surface_key)
             .ok_or_else(|| utils::make_error("surface not found"))?;
-        let slotmap_physical_device = SLOTMAP_PHYSICAL_DEVICE.read()?;
+        let slotmap_physical_device = physical::slotmap::read()?;
         let physical_device = slotmap_physical_device
             .get(physical_device_key)
             .ok_or_else(|| utils::make_error("physical device not found"))?;
@@ -221,7 +222,7 @@ impl Device {
                 utils::make_error("surface and physical device parents must be the same").into(),
             );
         }
-        let slotmap_instance = SLOTMAP_INSTANCE.read()?;
+        let slotmap_instance = instance::slotmap::read()?;
         let instance = slotmap_instance
             .get(surface_instance)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -283,7 +284,7 @@ impl Device {
         self.loader.handle()
     }
 
-    pub fn parent_physical_device(&self) -> PhysicalDeviceKey {
+    pub fn parent_physical_device(&self) -> physical::slotmap::Key {
         self.parent_physical_device
     }
 
@@ -313,16 +314,16 @@ impl Drop for Device {
 pub struct Queue {
     family_index: u32,
     handle: vk::Queue,
-    parent_device: DeviceKey,
+    parent_device: logical::slotmap::Key,
 }
 
 impl Queue {
     unsafe fn new(
-        device_key: DeviceKey,
+        device_key: logical::slotmap::Key,
         family_index: u32,
         index: u32,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap = SLOTMAP_DEVICE.read()?;
+        let slotmap = logical::slotmap::read()?;
         let device = slotmap
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -338,7 +339,7 @@ impl Queue {
         self.handle
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> logical::slotmap::Key {
         self.parent_device
     }
 }

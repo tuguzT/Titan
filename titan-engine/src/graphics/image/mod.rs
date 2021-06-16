@@ -3,21 +3,23 @@ use std::error::Error;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::slotmap::{DeviceKey, ImageKey, SLOTMAP_DEVICE, SLOTMAP_IMAGE};
-use super::utils;
+use super::{device, image, utils};
+
+pub mod slotmap;
+pub mod view;
 
 pub struct Image {
     handle: vk::Image,
-    parent_device: DeviceKey,
+    parent_device: device::logical::slotmap::Key,
     owned: bool,
 }
 
 impl Image {
     pub unsafe fn new(
-        device_key: DeviceKey,
+        device_key: device::logical::slotmap::Key,
         create_info: &vk::ImageCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -29,7 +31,7 @@ impl Image {
         })
     }
 
-    pub unsafe fn from_raw(device_key: DeviceKey, handle: vk::Image) -> Self {
+    pub unsafe fn from_raw(device_key: device::logical::slotmap::Key, handle: vk::Image) -> Self {
         Self {
             handle,
             parent_device: device_key,
@@ -41,14 +43,14 @@ impl Image {
         self.handle
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> device::logical::slotmap::Key {
         self.parent_device
     }
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
-        let slotmap_device = match SLOTMAP_DEVICE.read() {
+        let slotmap_device = match device::logical::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };
@@ -64,21 +66,21 @@ impl Drop for Image {
 
 pub struct ImageView {
     handle: vk::ImageView,
-    parent_image: ImageKey,
+    parent_image: image::slotmap::Key,
 }
 
 impl ImageView {
     pub unsafe fn new(
-        image_key: ImageKey,
+        image_key: image::slotmap::Key,
         create_info: &vk::ImageViewCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_image = SLOTMAP_IMAGE.read()?;
+        let slotmap_image = image::slotmap::read()?;
         let image = slotmap_image
             .get(image_key)
             .ok_or_else(|| utils::make_error("image not found"))?;
 
         let device_key = image.parent_device();
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -90,7 +92,7 @@ impl ImageView {
         })
     }
 
-    pub fn parent_image(&self) -> ImageKey {
+    pub fn parent_image(&self) -> image::slotmap::Key {
         self.parent_image
     }
 
@@ -101,7 +103,7 @@ impl ImageView {
 
 impl Drop for ImageView {
     fn drop(&mut self) {
-        let slotmap_image = match SLOTMAP_IMAGE.read() {
+        let slotmap_image = match image::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };
@@ -110,7 +112,7 @@ impl Drop for ImageView {
             Some(value) => value,
         };
 
-        let slotmap_device = match SLOTMAP_DEVICE.read() {
+        let slotmap_device = match device::logical::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };

@@ -1,5 +1,2 @@
-pub use debug::DebugUtils;
-pub use swapchain::Swapchain;
-
-mod debug;
-mod swapchain;
+pub mod debug_utils;
+pub mod swapchain;

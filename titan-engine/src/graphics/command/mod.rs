@@ -3,22 +3,24 @@ use std::error::Error;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::slotmap::{CommandPoolKey, DeviceKey, SLOTMAP_COMMAND_POOL, SLOTMAP_DEVICE};
-use super::utils;
+use super::{command, device, utils};
+
+pub mod buffer;
+pub mod pool;
 
 pub struct CommandPool {
-    key: CommandPoolKey,
+    key: command::pool::slotmap::Key,
     handle: vk::CommandPool,
-    parent_device: DeviceKey,
+    parent_device: device::logical::slotmap::Key,
 }
 
 impl CommandPool {
     pub unsafe fn new(
-        key: CommandPoolKey,
-        device_key: DeviceKey,
+        key: command::pool::slotmap::Key,
+        device_key: device::logical::slotmap::Key,
         create_info: &vk::CommandPoolCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -35,7 +37,7 @@ impl CommandPool {
         self.handle
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> device::logical::slotmap::Key {
         self.parent_device
     }
 
@@ -44,7 +46,7 @@ impl CommandPool {
         count: u32,
     ) -> Result<Vec<CommandBuffer>, Box<dyn Error>> {
         let device_key = self.parent_device();
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("parent was lost"))?;
@@ -66,7 +68,7 @@ impl CommandPool {
 
 impl Drop for CommandPool {
     fn drop(&mut self) {
-        let slotmap_device = SLOTMAP_DEVICE.read();
+        let slotmap_device = device::logical::slotmap::read();
         let slotmap_device = match slotmap_device {
             Ok(value) => value,
             Err(_) => return,
@@ -81,18 +83,21 @@ impl Drop for CommandPool {
 
 pub struct CommandBuffer {
     handle: vk::CommandBuffer,
-    parent_command_pool: CommandPoolKey,
+    parent_command_pool: command::pool::slotmap::Key,
 }
 
 impl CommandBuffer {
-    unsafe fn new(command_pool_key: CommandPoolKey, handle: vk::CommandBuffer) -> Self {
+    unsafe fn new(
+        command_pool_key: command::pool::slotmap::Key,
+        handle: vk::CommandBuffer,
+    ) -> Self {
         Self {
             handle,
             parent_command_pool: command_pool_key,
         }
     }
 
-    pub fn parent_command_pool(&self) -> CommandPoolKey {
+    pub fn parent_command_pool(&self) -> command::pool::slotmap::Key {
         self.parent_command_pool
     }
 
@@ -104,12 +109,12 @@ impl CommandBuffer {
         &self,
         begin_info: &vk::CommandBufferBeginInfo,
     ) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = SLOTMAP_COMMAND_POOL.read()?;
+        let slotmap_command_pool = command::pool::slotmap::read()?;
         let command_pool = slotmap_command_pool
             .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
 
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
@@ -120,12 +125,12 @@ impl CommandBuffer {
     }
 
     pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = SLOTMAP_COMMAND_POOL.read()?;
+        let slotmap_command_pool = command::pool::slotmap::read()?;
         let command_pool = slotmap_command_pool
             .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
 
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;

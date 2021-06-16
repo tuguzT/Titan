@@ -4,21 +4,25 @@ use std::io::Cursor;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::slotmap::{DeviceKey, SLOTMAP_DEVICE};
-use super::utils;
+use super::{device, utils};
 
-pub const VERT_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/vert.spv");
-pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/frag.spv");
+pub mod slotmap;
+
+pub const VERT_SHADER_CODE: &[u8] = include_bytes!("../../../res/shaders/output/vert.spv");
+pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../../res/shaders/output/frag.spv");
 
 pub struct ShaderModule {
     handle: vk::ShaderModule,
     code: Vec<u32>,
-    parent_device: DeviceKey,
+    parent_device: device::logical::slotmap::Key,
 }
 
 impl ShaderModule {
-    pub fn new(device_key: DeviceKey, code: &[u8]) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+    pub fn new(
+        device_key: device::logical::slotmap::Key,
+        code: &[u8],
+    ) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -41,14 +45,14 @@ impl ShaderModule {
         self.code.as_slice()
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> device::logical::slotmap::Key {
         self.parent_device
     }
 }
 
 impl Drop for ShaderModule {
     fn drop(&mut self) {
-        let slotmap_device = match SLOTMAP_DEVICE.read() {
+        let slotmap_device = match device::logical::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };

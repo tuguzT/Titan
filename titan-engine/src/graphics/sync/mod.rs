@@ -1,5 +1,5 @@
 pub use fence::Fence;
 pub use semaphore::Semaphore;
 
-mod fence;
-mod semaphore;
+pub mod fence;
+pub mod semaphore;

@@ -3,20 +3,21 @@ use std::error::Error;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use crate::graphics::slotmap::{DeviceKey, SLOTMAP_DEVICE};
-use crate::graphics::utils;
+use super::super::{device, utils};
+
+pub mod slotmap;
 
 pub struct Fence {
     handle: vk::Fence,
-    parent_device: DeviceKey,
+    parent_device: device::logical::slotmap::Key,
 }
 
 impl Fence {
     pub fn new(
-        device_key: DeviceKey,
+        device_key: device::logical::slotmap::Key,
         create_info: &vk::FenceCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = SLOTMAP_DEVICE.read()?;
+        let slotmap_device = device::logical::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -32,14 +33,14 @@ impl Fence {
         self.handle
     }
 
-    pub fn parent_device(&self) -> DeviceKey {
+    pub fn parent_device(&self) -> device::logical::slotmap::Key {
         self.parent_device
     }
 }
 
 impl Drop for Fence {
     fn drop(&mut self) {
-        let slotmap_device = match SLOTMAP_DEVICE.read() {
+        let slotmap_device = match device::logical::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };
