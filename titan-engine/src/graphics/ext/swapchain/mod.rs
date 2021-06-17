@@ -6,9 +6,9 @@ use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 use winit::window::Window;
 
-use crate::graphics::{utils, Image};
+use super::super::{device, instance, surface, utils, Image};
 
-use super::super::{device, instance, surface};
+pub use self::slotmap::Key;
 
 pub mod slotmap;
 
@@ -17,17 +17,17 @@ pub struct Swapchain {
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
     loader: AshSwapchain,
-    parent_device: device::logical::slotmap::Key,
-    parent_surface: surface::slotmap::Key,
+    parent_device: device::Key,
+    parent_surface: surface::Key,
 }
 
 impl Swapchain {
     pub fn new(
         window: &Window,
-        device_key: device::logical::slotmap::Key,
-        surface_key: surface::slotmap::Key,
+        device_key: device::Key,
+        surface_key: surface::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::logical::slotmap::read()?;
+        let slotmap_device = device::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -112,11 +112,11 @@ impl Swapchain {
         self.handle
     }
 
-    pub fn parent_device(&self) -> device::logical::slotmap::Key {
+    pub fn parent_device(&self) -> device::Key {
         self.parent_device
     }
 
-    pub fn parent_surface(&self) -> surface::slotmap::Key {
+    pub fn parent_surface(&self) -> surface::Key {
         self.parent_surface
     }
 

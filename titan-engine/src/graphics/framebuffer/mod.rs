@@ -5,19 +5,21 @@ use ash::vk;
 
 use super::{device, utils};
 
+pub use self::slotmap::Key;
+
 pub mod slotmap;
 
 pub struct Framebuffer {
     handle: vk::Framebuffer,
-    parent_device: device::logical::slotmap::Key,
+    parent_device: device::Key,
 }
 
 impl Framebuffer {
     pub unsafe fn new(
-        device_key: device::logical::slotmap::Key,
+        device_key: device::Key,
         create_info: &vk::FramebufferCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::logical::slotmap::read()?;
+        let slotmap_device = device::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -33,14 +35,14 @@ impl Framebuffer {
         self.handle
     }
 
-    pub fn parent_device(&self) -> device::logical::slotmap::Key {
+    pub fn parent_device(&self) -> device::Key {
         self.parent_device
     }
 }
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
-        let slotmap_device = match device::logical::slotmap::read() {
+        let slotmap_device = match device::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };

@@ -6,6 +6,8 @@ use winit::window::Window;
 
 use super::{instance, utils, PhysicalDevice};
 
+pub use self::slotmap::Key;
+
 pub mod slotmap;
 
 type SurfaceLoader = ash::extensions::khr::Surface;
@@ -13,14 +15,11 @@ type SurfaceLoader = ash::extensions::khr::Surface;
 pub struct Surface {
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
-    parent_instance: instance::slotmap::Key,
+    parent_instance: instance::Key,
 }
 
 impl Surface {
-    pub fn new(
-        instance_key: instance::slotmap::Key,
-        window: &Window,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key, window: &Window) -> Result<Self, Box<dyn Error>> {
         let slotmap = super::instance::slotmap::read()?;
         let instance = slotmap
             .get(instance_key)
@@ -40,7 +39,7 @@ impl Surface {
         self.handle
     }
 
-    pub fn parent_instance(&self) -> instance::slotmap::Key {
+    pub fn parent_instance(&self) -> instance::Key {
         self.parent_instance
     }
 

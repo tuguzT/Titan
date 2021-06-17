@@ -1,3 +1,3 @@
-use super::super::Queue;
+use super::Queue;
 
 crate::slotmap_helper!(Queue);

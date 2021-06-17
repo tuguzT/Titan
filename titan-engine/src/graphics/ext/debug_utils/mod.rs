@@ -9,16 +9,18 @@ use log::Level;
 
 use super::super::{instance, utils};
 
+pub use self::slotmap::Key;
+
 pub mod slotmap;
 
 pub struct DebugUtils {
     loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
-    parent_instance: instance::slotmap::Key,
+    parent_instance: instance::Key,
 }
 
 impl DebugUtils {
-    pub fn new(instance_key: instance::slotmap::Key) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key) -> Result<Self, Box<dyn Error>> {
         let slotmap = instance::slotmap::read()?;
         let instance = slotmap
             .get(instance_key)
@@ -39,7 +41,7 @@ impl DebugUtils {
         })
     }
 
-    pub fn parent_instance(&self) -> instance::slotmap::Key {
+    pub fn parent_instance(&self) -> instance::Key {
         self.parent_instance
     }
 
@@ -87,10 +89,9 @@ unsafe extern "system" fn callback(
             _ => unreachable!(),
         };
         log::log!(
-            target: "titan_engine::graphics::debug",
+            target: "titan_engine::graphics::log",
             level,
-            "{:?}:{:?} [{} ({})] : {}",
-            message_severity,
+            "{:?} [{} ({})] : {}",
             message_type,
             message_id_name,
             message_id_number,

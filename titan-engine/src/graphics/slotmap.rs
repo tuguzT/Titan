@@ -19,7 +19,7 @@ pub fn clear() {
     image::slotmap::clear();
     swapchain::slotmap::clear();
     device::queue::slotmap::clear();
-    device::logical::slotmap::clear();
+    device::slotmap::clear();
     device::physical::slotmap::clear();
     surface::slotmap::clear();
     debug_utils::slotmap::clear();

@@ -1,3 +1,3 @@
-use super::super::PhysicalDevice;
+use super::PhysicalDevice;
 
 crate::slotmap_helper!(PhysicalDevice);

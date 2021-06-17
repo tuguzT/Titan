@@ -6,6 +6,8 @@ use ash::vk;
 
 use super::{device, utils};
 
+pub use self::slotmap::Key;
+
 pub mod slotmap;
 
 pub const VERT_SHADER_CODE: &[u8] = include_bytes!("../../../res/shaders/output/vert.spv");
@@ -14,15 +16,12 @@ pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../../res/shaders/output/
 pub struct ShaderModule {
     handle: vk::ShaderModule,
     code: Vec<u32>,
-    parent_device: device::logical::slotmap::Key,
+    parent_device: device::Key,
 }
 
 impl ShaderModule {
-    pub fn new(
-        device_key: device::logical::slotmap::Key,
-        code: &[u8],
-    ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::logical::slotmap::read()?;
+    pub fn new(device_key: device::Key, code: &[u8]) -> Result<Self, Box<dyn Error>> {
+        let slotmap_device = device::slotmap::read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -45,14 +44,14 @@ impl ShaderModule {
         self.code.as_slice()
     }
 
-    pub fn parent_device(&self) -> device::logical::slotmap::Key {
+    pub fn parent_device(&self) -> device::Key {
         self.parent_device
     }
 }
 
 impl Drop for ShaderModule {
     fn drop(&mut self) {
-        let slotmap_device = match device::logical::slotmap::read() {
+        let slotmap_device = match device::slotmap::read() {
             Ok(value) => value,
             Err(_) => return,
         };

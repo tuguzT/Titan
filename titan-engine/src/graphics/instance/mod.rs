@@ -10,8 +10,11 @@ use winit::window::Window;
 use crate::{
     config::ENGINE_VERSION,
     config::{Config, Version, ENGINE_NAME},
-    graphics::{device::PhysicalDevice, ext::debug_utils::DebugUtils, instance, utils},
 };
+
+use super::{device::PhysicalDevice, ext::DebugUtils, utils};
+
+pub use self::slotmap::Key;
 
 pub mod slotmap;
 
@@ -22,7 +25,7 @@ lazy_static::lazy_static! {
 pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 pub struct Instance {
-    key: instance::slotmap::Key,
+    key: Key,
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
@@ -31,11 +34,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(
-        key: instance::slotmap::Key,
-        config: &Config,
-        window: &Window,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(key: Key, config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {

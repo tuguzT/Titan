@@ -6,7 +6,7 @@ use winit::window::Window;
 
 use command::CommandPool;
 use device::{Device, PhysicalDevice};
-use ext::{debug_utils, debug_utils::DebugUtils, swapchain, swapchain::Swapchain};
+use ext::{debug_utils, swapchain, DebugUtils, Swapchain};
 use framebuffer::Framebuffer;
 use image::{Image, ImageView};
 use instance::Instance;
@@ -14,7 +14,7 @@ use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
 use sync::{fence, semaphore, Fence, Semaphore};
 
-use super::config::Config;
+use crate::config::Config;
 
 mod command;
 mod device;
@@ -34,24 +34,24 @@ const MAX_FRAMES_IN_FLIGHT: usize = 10;
 pub struct Renderer {
     frame_index: usize,
     images_in_flight: Vec<vk::Fence>,
-    in_flight_fences: Vec<fence::slotmap::Key>,
-    render_finished_semaphores: Vec<semaphore::slotmap::Key>,
-    image_available_semaphores: Vec<semaphore::slotmap::Key>,
-    command_buffers: Vec<command::buffer::slotmap::Key>,
-    command_pool: command::pool::slotmap::Key,
-    framebuffers: Vec<framebuffer::slotmap::Key>,
-    graphics_pipeline: pipeline::slotmap::Key,
-    pipeline_layout: pipeline::layout::slotmap::Key,
-    render_pass: pipeline::render_pass::slotmap::Key,
-    swapchain_image_views: Vec<image::view::slotmap::Key>,
-    swapchain_images: Vec<image::slotmap::Key>,
-    swapchain: swapchain::slotmap::Key,
-    device_queues: Vec<device::queue::slotmap::Key>,
-    device: device::logical::slotmap::Key,
-    physical_device: device::physical::slotmap::Key,
-    surface: surface::slotmap::Key,
-    debug_utils: Option<debug_utils::slotmap::Key>,
-    instance: instance::slotmap::Key,
+    in_flight_fences: Vec<fence::Key>,
+    render_finished_semaphores: Vec<semaphore::Key>,
+    image_available_semaphores: Vec<semaphore::Key>,
+    command_buffers: Vec<command::buffer::Key>,
+    command_pool: command::pool::Key,
+    framebuffers: Vec<framebuffer::Key>,
+    graphics_pipeline: pipeline::Key,
+    pipeline_layout: pipeline::layout::Key,
+    render_pass: pipeline::render_pass::Key,
+    swapchain_image_views: Vec<image::view::Key>,
+    swapchain_images: Vec<image::Key>,
+    swapchain: swapchain::Key,
+    device_queues: Vec<device::queue::Key>,
+    device: device::Key,
+    physical_device: device::physical::Key,
+    surface: surface::Key,
+    debug_utils: Option<debug_utils::Key>,
+    instance: instance::Key,
 }
 
 impl Renderer {
@@ -112,11 +112,11 @@ impl Renderer {
         };
 
         let device = {
-            let mut slotmap = device::logical::slotmap::write()?;
+            let mut slotmap = device::slotmap::write()?;
             slotmap.insert_with_key(|key| Device::new(key, surface, physical_device).unwrap())
         };
         let device_queues = {
-            let slotmap_device = device::logical::slotmap::read()?;
+            let slotmap_device = device::slotmap::read()?;
             let device = slotmap_device.get(device).unwrap();
             let mut slotmap_queue = device::queue::slotmap::write()?;
             device
@@ -233,7 +233,7 @@ impl Renderer {
                 .collect()
         };
 
-        let slotmap_device = device::logical::slotmap::read()?;
+        let slotmap_device = device::slotmap::read()?;
         let slotmap_command_buffer = command::buffer::slotmap::read()?;
         let slotmap_swapchain = swapchain::slotmap::read()?;
         let slotmap_render_pass = pipeline::render_pass::slotmap::read()?;
@@ -332,7 +332,7 @@ impl Renderer {
             .get(self.in_flight_fences[self.frame_index])
             .unwrap();
 
-        let slotmap_device = device::logical::slotmap::read()?;
+        let slotmap_device = device::slotmap::read()?;
         let device = slotmap_device.get(self.device).unwrap();
 
         let slotmap_swapchain = swapchain::slotmap::read()?;
@@ -412,7 +412,7 @@ impl Renderer {
 
     pub fn wait(&mut self) -> Result<(), Box<dyn Error>> {
         unsafe {
-            let slotmap = device::logical::slotmap::read()?;
+            let slotmap = device::slotmap::read()?;
             let device = slotmap
                 .get(self.device)
                 .ok_or_else(|| utils::make_error("Wait failure: device not found"))?;

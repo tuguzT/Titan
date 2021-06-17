@@ -7,7 +7,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use config::Config;
-use graphics::Renderer;
+use graphics::{slotmap, Renderer};
 
 pub mod config;
 pub mod error;
@@ -66,7 +66,7 @@ where
                     log::error!("{}", error);
                 }
                 unsafe { ManuallyDrop::drop(&mut renderer) }
-                crate::graphics::slotmap::clear();
+                slotmap::clear();
                 log::info!(target: "titan_engine::window", "closing this application");
             }
             _ => (),
