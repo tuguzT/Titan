@@ -2,21 +2,25 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash_window::enumerate_required_extensions;
 use winit::window::Window;
+
+use proc_macro::SlotMappable;
 
 use crate::{
     config::ENGINE_VERSION,
     config::{Config, Version, ENGINE_NAME},
 };
 
-use super::{device::PhysicalDevice, ext::DebugUtils, utils};
-
-pub use self::slotmap::Key;
-
-pub mod slotmap;
+use super::{
+    device::{self, PhysicalDevice},
+    ext::DebugUtils,
+    slotmap::SlotMappable,
+    utils,
+};
 
 lazy_static::lazy_static! {
     static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
@@ -24,6 +28,11 @@ lazy_static::lazy_static! {
 
 pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
+slotmap::new_key_type! {
+    pub struct Key;
+}
+
+#[derive(SlotMappable)]
 pub struct Instance {
     key: Key,
     version: Version,
@@ -143,7 +152,9 @@ impl Instance {
         let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
         handles
             .into_iter()
-            .map(|handle| unsafe { PhysicalDevice::new(self.key, handle) })
+            .map(|handle| unsafe {
+                PhysicalDevice::new(device::physical::Key::null(), self.key, handle)
+            })
             .collect()
     }
 }

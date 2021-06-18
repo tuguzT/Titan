@@ -1,11 +1,12 @@
 use std::error::Error;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use winit::window::Window;
 
-use command::CommandPool;
-use device::{Device, PhysicalDevice};
+use command::{CommandBuffer, CommandPool};
+use device::{Device, PhysicalDevice, Queue};
 use ext::{debug_utils, swapchain, DebugUtils, Swapchain};
 use framebuffer::Framebuffer;
 use image::{Image, ImageView};
@@ -15,6 +16,8 @@ use surface::Surface;
 use sync::{fence, semaphore, Fence, Semaphore};
 
 use crate::config::Config;
+
+use self::slotmap::SlotMappable;
 
 mod command;
 mod device;
@@ -57,7 +60,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
         let instance = {
-            let mut slotmap = instance::slotmap::write()?;
+            let mut slotmap = Instance::slotmap().write()?;
             let key = slotmap.insert_with_key(|key| Instance::new(key, config, window).unwrap());
             let instance = slotmap.get_mut(key).unwrap();
             log::info!(
@@ -68,23 +71,23 @@ impl Renderer {
         };
 
         let debug_utils = if instance::ENABLE_VALIDATION {
-            let mut slotmap = debug_utils::slotmap::write()?;
-            let key = slotmap.insert(DebugUtils::new(instance)?);
+            let mut slotmap = DebugUtils::slotmap().write()?;
+            let key = slotmap.insert_with_key(|key| DebugUtils::new(key, instance).unwrap());
             log::info!("debug_utils extension was attached to the instance");
             Some(key)
         } else {
             None
         };
         let surface = {
-            let mut slotmap = surface::slotmap::write()?;
-            slotmap.insert(Surface::new(instance, window)?)
+            let mut slotmap = Surface::slotmap().write()?;
+            slotmap.insert_with_key(|key| Surface::new(key, instance, window).unwrap())
         };
 
         let physical_device = {
             let mut physical_devices: Vec<_> = {
-                let slotmap_surface = surface::slotmap::read()?;
+                let slotmap_surface = Surface::slotmap().read()?;
                 let surface = slotmap_surface.get(surface).unwrap();
-                let slotmap_instance = instance::slotmap::read()?;
+                let slotmap_instance = Instance::slotmap().read()?;
                 let instance = slotmap_instance.get(instance).unwrap();
                 instance
                     .enumerate_physical_devices()?
@@ -107,18 +110,18 @@ impl Renderer {
                 .into_iter()
                 .next()
                 .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?;
-            let mut slotmap = device::physical::slotmap::write()?;
+            let mut slotmap = device::PhysicalDevice::slotmap().write()?;
             slotmap.insert(physical_device)
         };
 
         let device = {
-            let mut slotmap = device::slotmap::write()?;
+            let mut slotmap = Device::slotmap().write()?;
             slotmap.insert_with_key(|key| Device::new(key, surface, physical_device).unwrap())
         };
         let device_queues = {
-            let slotmap_device = device::slotmap::read()?;
+            let slotmap_device = Device::slotmap().read()?;
             let device = slotmap_device.get(device).unwrap();
-            let mut slotmap_queue = device::queue::slotmap::write()?;
+            let mut slotmap_queue = Queue::slotmap().write()?;
             device
                 .enumerate_queues()?
                 .into_iter()
@@ -127,13 +130,13 @@ impl Renderer {
         };
 
         let swapchain = {
-            let mut slotmap = swapchain::slotmap::write()?;
-            slotmap.insert(Swapchain::new(window, device, surface)?)
+            let mut slotmap = Swapchain::slotmap().write()?;
+            slotmap.insert_with_key(|key| Swapchain::new(key, window, device, surface).unwrap())
         };
         let swapchain_images: Vec<_> = {
-            let slotmap_swapchain = swapchain::slotmap::read()?;
+            let slotmap_swapchain = Swapchain::slotmap().read()?;
             let swapchain = slotmap_swapchain.get(swapchain).unwrap();
-            let mut slotmap_image = image::slotmap::write()?;
+            let mut slotmap_image = Image::slotmap().write()?;
             swapchain
                 .enumerate_images()?
                 .into_iter()
@@ -141,10 +144,10 @@ impl Renderer {
                 .collect()
         };
         let swapchain_image_views = {
-            let slotmap_swapchain = swapchain::slotmap::read()?;
+            let slotmap_swapchain = Swapchain::slotmap().read()?;
             let swapchain = slotmap_swapchain.get(swapchain).unwrap();
-            let slotmap_image = image::slotmap::read()?;
-            let mut slotmap_image_view = image::view::slotmap::write()?;
+            let slotmap_image = Image::slotmap().read()?;
+            let mut slotmap_image_view = ImageView::slotmap().write()?;
             swapchain_images
                 .iter()
                 .map(|&image_key| unsafe {
@@ -166,31 +169,33 @@ impl Renderer {
                             base_array_layer: 0,
                             layer_count: 1,
                         });
-                    ImageView::new(image_key, &create_info)
+                    ImageView::new(image::view::Key::null(), image_key, &create_info)
                         .map(|image_view| slotmap_image_view.insert(image_view))
                 })
                 .collect::<Result<Vec<_>, _>>()?
         };
 
         let render_pass = {
-            let mut slotmap = pipeline::render_pass::slotmap::write()?;
-            slotmap.insert(RenderPass::new(swapchain)?)
+            let mut slotmap = RenderPass::slotmap().write()?;
+            slotmap.insert_with_key(|key| RenderPass::new(key, swapchain).unwrap())
         };
         let pipeline_layout = {
-            let mut slotmap = pipeline::layout::slotmap::write()?;
-            slotmap.insert(PipelineLayout::new(device)?)
+            let mut slotmap = PipelineLayout::slotmap().write()?;
+            slotmap.insert_with_key(|key| PipelineLayout::new(key, device).unwrap())
         };
         let graphics_pipeline = {
-            let mut slotmap = pipeline::slotmap::write()?;
-            slotmap.insert(GraphicsPipeline::new(render_pass, pipeline_layout)?)
+            let mut slotmap = GraphicsPipeline::slotmap().write()?;
+            slotmap.insert_with_key(|key| {
+                GraphicsPipeline::new(key, render_pass, pipeline_layout).unwrap()
+            })
         };
 
         let framebuffers = {
-            let mut slotmap_framebuffer = framebuffer::slotmap::write()?;
-            let slotmap_image_view = image::view::slotmap::read()?;
-            let slotmap_render_pass = pipeline::render_pass::slotmap::read()?;
+            let mut slotmap_framebuffer = Framebuffer::slotmap().write()?;
+            let slotmap_image_view = ImageView::slotmap().read()?;
+            let slotmap_render_pass = RenderPass::slotmap().read()?;
             let render_pass = slotmap_render_pass.get(render_pass).unwrap();
-            let slotmap_swapchain = swapchain::slotmap::read()?;
+            let slotmap_swapchain = Swapchain::slotmap().read()?;
             let swapchain = slotmap_swapchain.get(swapchain).unwrap();
             swapchain_image_views
                 .iter()
@@ -203,7 +208,7 @@ impl Renderer {
                         .width(swapchain.extent().width)
                         .height(swapchain.extent().height)
                         .layers(1);
-                    Framebuffer::new(device, &create_info)
+                    Framebuffer::new(framebuffer::Key::null(), device, &create_info)
                         .map(|framebuffer| slotmap_framebuffer.insert(framebuffer))
                 })
                 .collect::<Result<Vec<_>, _>>()?
@@ -211,21 +216,21 @@ impl Renderer {
 
         let command_pool = unsafe {
             let graphics_queue_family_index = {
-                let slotmap = device::physical::slotmap::read()?;
+                let slotmap = device::PhysicalDevice::slotmap().read()?;
                 let physical_device = slotmap.get(physical_device).unwrap();
                 physical_device.graphics_family_index().unwrap()
             };
             let command_pool_create_info = vk::CommandPoolCreateInfo::builder()
                 .queue_family_index(graphics_queue_family_index);
-            let mut slotmap = command::pool::slotmap::write()?;
+            let mut slotmap = CommandPool::slotmap().write()?;
             slotmap.insert_with_key(|key| {
                 CommandPool::new(key, device, &command_pool_create_info).unwrap()
             })
         };
         let command_buffers: Vec<_> = {
-            let slotmap_command_pool = command::pool::slotmap::read()?;
+            let slotmap_command_pool = CommandPool::slotmap().read()?;
             let command_pool = slotmap_command_pool.get(command_pool).unwrap();
-            let mut slotmap_command_buffer = command::buffer::slotmap::write()?;
+            let mut slotmap_command_buffer = CommandBuffer::slotmap().write()?;
             command_pool
                 .enumerate_command_buffers(swapchain_image_views.len() as u32)?
                 .into_iter()
@@ -233,12 +238,12 @@ impl Renderer {
                 .collect()
         };
 
-        let slotmap_device = device::slotmap::read()?;
-        let slotmap_command_buffer = command::buffer::slotmap::read()?;
-        let slotmap_swapchain = swapchain::slotmap::read()?;
-        let slotmap_render_pass = pipeline::render_pass::slotmap::read()?;
-        let slotmap_framebuffer = framebuffer::slotmap::read()?;
-        let slotmap_graphics_pipeline = pipeline::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
+        let slotmap_command_buffer = CommandBuffer::slotmap().read()?;
+        let slotmap_swapchain = Swapchain::slotmap().read()?;
+        let slotmap_render_pass = RenderPass::slotmap().read()?;
+        let slotmap_framebuffer = Framebuffer::slotmap().read()?;
+        let slotmap_graphics_pipeline = GraphicsPipeline::slotmap().read()?;
         let render_pass_ref = slotmap_render_pass.get(render_pass).unwrap();
         let swapchain_ref = slotmap_swapchain.get(swapchain).unwrap();
         let graphics_pipeline_ref = slotmap_graphics_pipeline.get(graphics_pipeline).unwrap();
@@ -280,11 +285,14 @@ impl Renderer {
         }
 
         let create_semaphores = || {
-            let slotmap = semaphore::slotmap::write();
+            let slotmap = Semaphore::slotmap().write();
             if let Ok(mut slotmap) = slotmap {
                 (0..MAX_FRAMES_IN_FLIGHT)
                     .into_iter()
-                    .map(|_| Semaphore::new(device).map(|semaphore| slotmap.insert(semaphore)))
+                    .map(|_| {
+                        Semaphore::new(semaphore::Key::null(), device)
+                            .map(|semaphore| slotmap.insert(semaphore))
+                    })
                     .collect::<Result<Vec<_>, _>>()
             } else {
                 Err(utils::make_error("error").into())
@@ -295,10 +303,13 @@ impl Renderer {
         let fence_create_info =
             vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
         let in_flight_fences = {
-            let mut slotmap = fence::slotmap::write()?;
+            let mut slotmap = Fence::slotmap().write()?;
             (0..MAX_FRAMES_IN_FLIGHT)
                 .into_iter()
-                .map(|_| Fence::new(device, &fence_create_info).map(|fence| slotmap.insert(fence)))
+                .map(|_| {
+                    Fence::new(fence::Key::null(), device, &fence_create_info)
+                        .map(|fence| slotmap.insert(fence))
+                })
                 .collect::<Result<Vec<_>, _>>()?
         };
 
@@ -327,18 +338,18 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        let slotmap_fence = fence::slotmap::read()?;
+        let slotmap_fence = Fence::slotmap().read()?;
         let in_flight_fence = slotmap_fence
             .get(self.in_flight_fences[self.frame_index])
             .unwrap();
 
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device.get(self.device).unwrap();
 
-        let slotmap_swapchain = swapchain::slotmap::read()?;
+        let slotmap_swapchain = Swapchain::slotmap().read()?;
         let swapchain = slotmap_swapchain.get(self.swapchain).unwrap();
 
-        let slotmap_semaphore = semaphore::slotmap::read()?;
+        let slotmap_semaphore = Semaphore::slotmap().read()?;
         let image_available_semaphore = slotmap_semaphore
             .get(self.image_available_semaphores[self.frame_index])
             .unwrap();
@@ -346,7 +357,7 @@ impl Renderer {
             .get(self.render_finished_semaphores[self.frame_index])
             .unwrap();
 
-        let slotmap_queue = device::queue::slotmap::read()?;
+        let slotmap_queue = Queue::slotmap().read()?;
         let queue = slotmap_queue.get(self.device_queues[0]).unwrap();
 
         unsafe {
@@ -365,7 +376,7 @@ impl Renderer {
                 )?
                 .0 as usize
         };
-        let slotmap_command_buffer = command::buffer::slotmap::read()?;
+        let slotmap_command_buffer = CommandBuffer::slotmap().read()?;
         let command_buffer = slotmap_command_buffer
             .get(self.command_buffers[image_index])
             .unwrap();
@@ -412,7 +423,7 @@ impl Renderer {
 
     pub fn wait(&mut self) -> Result<(), Box<dyn Error>> {
         unsafe {
-            let slotmap = device::slotmap::read()?;
+            let slotmap = Device::slotmap().read()?;
             let device = slotmap
                 .get(self.device)
                 .ok_or_else(|| utils::make_error("Wait failure: device not found"))?;

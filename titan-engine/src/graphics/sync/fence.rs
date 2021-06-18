@@ -3,35 +3,45 @@ use std::error::Error;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::{device, utils};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{
+    super::slotmap::SlotMappable,
+    device::{self, Device},
+    utils,
+};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
-pub struct Framebuffer {
-    handle: vk::Framebuffer,
+#[derive(SlotMappable)]
+pub struct Fence {
+    key: Key,
+    handle: vk::Fence,
     parent_device: device::Key,
 }
 
-impl Framebuffer {
-    pub unsafe fn new(
+impl Fence {
+    pub fn new(
+        key: Key,
         device_key: device::Key,
-        create_info: &vk::FramebufferCreateInfo,
+        create_info: &vk::FenceCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
 
-        let handle = device.loader().create_framebuffer(create_info, None)?;
+        let handle = unsafe { device.loader().create_fence(&create_info, None)? };
         Ok(Self {
+            key,
             handle,
             parent_device: device_key,
         })
     }
 
-    pub fn handle(&self) -> vk::Framebuffer {
+    pub fn handle(&self) -> vk::Fence {
         self.handle
     }
 
@@ -40,9 +50,9 @@ impl Framebuffer {
     }
 }
 
-impl Drop for Framebuffer {
+impl Drop for Fence {
     fn drop(&mut self) {
-        let slotmap_device = match device::slotmap::read() {
+        let slotmap_device = match Device::slotmap().read() {
             Ok(value) => value,
             Err(_) => return,
         };
@@ -50,6 +60,6 @@ impl Drop for Framebuffer {
             None => return,
             Some(value) => value,
         };
-        unsafe { device.loader().destroy_framebuffer(self.handle, None) }
+        unsafe { device.loader().destroy_fence(self.handle, None) }
     }
 }

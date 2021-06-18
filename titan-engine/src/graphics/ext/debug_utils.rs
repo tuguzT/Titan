@@ -7,21 +7,25 @@ use ash::extensions::ext::DebugUtils as AshDebugUtils;
 use ash::vk;
 use log::Level;
 
-use super::super::{instance, utils};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{instance, instance::Instance, slotmap::SlotMappable, utils};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
+#[derive(SlotMappable)]
 pub struct DebugUtils {
+    key: Key,
     loader: AshDebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
     parent_instance: instance::Key,
 }
 
 impl DebugUtils {
-    pub fn new(instance_key: instance::Key) -> Result<Self, Box<dyn Error>> {
-        let slotmap = instance::slotmap::read()?;
+    pub fn new(key: Key, instance_key: instance::Key) -> Result<Self, Box<dyn Error>> {
+        let slotmap = Instance::slotmap().read()?;
         let instance = slotmap
             .get(instance_key)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -35,6 +39,7 @@ impl DebugUtils {
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
 
         Ok(Self {
+            key,
             loader,
             messenger,
             parent_instance: instance_key,

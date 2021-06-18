@@ -3,23 +3,31 @@ use std::error::Error;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::super::{command, device, utils};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{
+    super::slotmap::SlotMappable, command, command::CommandPool, device::Device, utils,
+};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
+#[derive(SlotMappable)]
 pub struct CommandBuffer {
+    key: Key,
     handle: vk::CommandBuffer,
     parent_command_pool: command::pool::Key,
 }
 
 impl CommandBuffer {
     pub(super) unsafe fn new(
+        key: Key,
         command_pool_key: command::pool::Key,
         handle: vk::CommandBuffer,
     ) -> Self {
         Self {
+            key,
             handle,
             parent_command_pool: command_pool_key,
         }
@@ -37,12 +45,12 @@ impl CommandBuffer {
         &self,
         begin_info: &vk::CommandBufferBeginInfo,
     ) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = command::pool::slotmap::read()?;
+        let slotmap_command_pool = CommandPool::slotmap().read()?;
         let command_pool = slotmap_command_pool
             .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
 
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
@@ -53,12 +61,12 @@ impl CommandBuffer {
     }
 
     pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = command::pool::slotmap::read()?;
+        let slotmap_command_pool = CommandPool::slotmap().read()?;
         let command_pool = slotmap_command_pool
             .get(self.parent_command_pool())
             .ok_or_else(|| utils::make_error("parent was lost"))?;
 
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(command_pool.parent_device())
             .ok_or_else(|| utils::make_error("command pool parent was lost"))?;

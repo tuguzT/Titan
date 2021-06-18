@@ -56,14 +56,14 @@ where
             },
             Event::MainEventsCleared => {
                 if let Err(error) = renderer.render() {
-                    log::error!("{}", error);
+                    log::error!("{:?}", error);
                     *control_flow = ControlFlow::Exit;
                 }
             }
             Event::LoopDestroyed => {
                 callback(MyEvent::Destroyed);
                 if let Err(error) = renderer.wait() {
-                    log::error!("{}", error);
+                    log::error!("{:?}", error);
                 }
                 unsafe { ManuallyDrop::drop(&mut renderer) }
                 slotmap::clear();
@@ -75,9 +75,11 @@ where
 }
 
 fn get_or_panic<T>(value: Result<T, Box<dyn Error>>) -> T {
-    if let Err(error) = value {
-        log::error!("initialization error: {}", error);
-        panic!("initialization error: {}", error);
+    match value {
+        Ok(value) => value,
+        Err(error) => {
+            log::error!("initialization error: {:?}", error);
+            panic!("initialization error: {:?}", error);
+        }
     }
-    value.unwrap()
 }

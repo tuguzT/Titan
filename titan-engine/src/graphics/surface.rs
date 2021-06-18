@@ -4,23 +4,31 @@ use ash::vk;
 use ash_window::create_surface;
 use winit::window::Window;
 
-use super::{instance, utils, PhysicalDevice};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::{instance, instance::Instance, slotmap::SlotMappable, utils, PhysicalDevice};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
 type SurfaceLoader = ash::extensions::khr::Surface;
 
+#[derive(SlotMappable)]
 pub struct Surface {
+    key: Key,
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
     parent_instance: instance::Key,
 }
 
 impl Surface {
-    pub fn new(instance_key: instance::Key, window: &Window) -> Result<Self, Box<dyn Error>> {
-        let slotmap = super::instance::slotmap::read()?;
+    pub fn new(
+        key: Key,
+        instance_key: instance::Key,
+        window: &Window,
+    ) -> Result<Self, Box<dyn Error>> {
+        let slotmap = Instance::slotmap().read()?;
         let instance = slotmap
             .get(instance_key)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -29,6 +37,7 @@ impl Surface {
         let handle =
             unsafe { create_surface(instance.entry_loader(), instance.loader(), window, None) }?;
         Ok(Self {
+            key,
             loader,
             handle,
             parent_instance: instance_key,

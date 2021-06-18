@@ -6,13 +6,22 @@ use ash::prelude::VkResult;
 use ash::version::InstanceV1_0;
 use ash::vk;
 
-use super::{instance, surface::Surface, utils};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{
+    instance::{self, Instance},
+    slotmap::SlotMappable,
+    surface::Surface,
+    utils,
+};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
+#[derive(SlotMappable)]
 pub struct PhysicalDevice {
+    key: Key,
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
@@ -25,10 +34,11 @@ pub struct PhysicalDevice {
 
 impl PhysicalDevice {
     pub unsafe fn new(
+        key: Key,
         instance_key: instance::Key,
         handle: vk::PhysicalDevice,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_instance = instance::slotmap::read()?;
+        let slotmap_instance = Instance::slotmap().read()?;
         let instance = slotmap_instance
             .get(instance_key)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -47,6 +57,7 @@ impl PhysicalDevice {
             .enumerate_device_extension_properties(handle)?;
 
         Ok(Self {
+            key,
             handle,
             properties,
             features,

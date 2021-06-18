@@ -1,53 +1,53 @@
+use std::sync::RwLock;
+
+use slotmap::SlotMap;
+
 use super::{
-    command, device,
-    ext::{debug_utils, swapchain},
-    framebuffer, image, instance, pipeline, shader, surface,
-    sync::{fence, semaphore},
+    command::{CommandBuffer, CommandPool},
+    device::{Device, PhysicalDevice, Queue},
+    ext::{DebugUtils, Swapchain},
+    framebuffer::Framebuffer,
+    image::{Image, ImageView},
+    instance::Instance,
+    pipeline::{GraphicsPipeline, PipelineLayout, RenderPass},
+    shader::ShaderModule,
+    surface::Surface,
+    sync::{Fence, Semaphore},
 };
 
 pub fn clear() {
-    fence::slotmap::clear();
-    semaphore::slotmap::clear();
-    shader::slotmap::clear();
-    command::buffer::slotmap::clear();
-    command::pool::slotmap::clear();
-    framebuffer::slotmap::clear();
-    pipeline::slotmap::clear();
-    pipeline::layout::slotmap::clear();
-    pipeline::render_pass::slotmap::clear();
-    image::view::slotmap::clear();
-    image::slotmap::clear();
-    swapchain::slotmap::clear();
-    device::queue::slotmap::clear();
-    device::slotmap::clear();
-    device::physical::slotmap::clear();
-    surface::slotmap::clear();
-    debug_utils::slotmap::clear();
-    instance::slotmap::clear();
+    clear_slot_mappable::<Fence>();
+    clear_slot_mappable::<Semaphore>();
+    clear_slot_mappable::<ShaderModule>();
+    clear_slot_mappable::<CommandBuffer>();
+    clear_slot_mappable::<CommandPool>();
+    clear_slot_mappable::<Framebuffer>();
+    clear_slot_mappable::<GraphicsPipeline>();
+    clear_slot_mappable::<PipelineLayout>();
+    clear_slot_mappable::<RenderPass>();
+    clear_slot_mappable::<ImageView>();
+    clear_slot_mappable::<Image>();
+    clear_slot_mappable::<Swapchain>();
+    clear_slot_mappable::<Queue>();
+    clear_slot_mappable::<Device>();
+    clear_slot_mappable::<PhysicalDevice>();
+    clear_slot_mappable::<Surface>();
+    clear_slot_mappable::<DebugUtils>();
+    clear_slot_mappable::<Instance>();
 }
 
-#[doc(hidden)]
-#[macro_export]
-macro_rules! slotmap_helper {
-    ($T:ty) => {
-        use std::sync::{LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard};
-        type SlotMap = slotmap::SlotMap<Key, $T>;
-        slotmap::new_key_type! {
-            pub struct Key;
-        }
-        lazy_static::lazy_static! {
-            static ref SLOTMAP: RwLock<SlotMap> = RwLock::new(SlotMap::with_key());
-        }
-        pub fn read() -> LockResult<RwLockReadGuard<'static, SlotMap>> {
-            SLOTMAP.read()
-        }
-        pub fn write() -> LockResult<RwLockWriteGuard<'static, SlotMap>> {
-            SLOTMAP.write()
-        }
-        pub fn clear() {
-            if let Ok(mut slotmap) = self::write() {
-                slotmap.clear()
-            }
-        }
-    };
+fn clear_slot_mappable<T>()
+where
+    T: SlotMappable + 'static,
+{
+    let mut slotmap = T::slotmap().write().unwrap();
+    slotmap.clear()
+}
+
+pub trait SlotMappable: Sized + Send + Sync {
+    type Key: slotmap::Key;
+
+    fn key(&self) -> Self::Key;
+
+    fn slotmap() -> &'static RwLock<SlotMap<Self::Key, Self>>;
 }

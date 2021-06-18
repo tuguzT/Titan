@@ -4,25 +4,30 @@ use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
 pub use physical::PhysicalDevice;
+use proc_macro::SlotMappable;
 pub use queue::Queue;
 
-use super::ext::Swapchain;
-use super::{instance, surface, utils};
-
-pub use self::slotmap::Key;
+use super::{
+    ext::Swapchain, instance::Instance, slotmap::SlotMappable, surface, surface::Surface, utils,
+};
 
 pub mod physical;
 pub mod queue;
-pub mod slotmap;
+
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
 lazy_static::lazy_static! {
     static ref REQUIRED_EXTENSIONS: Vec<&'static CStr> = vec![Swapchain::name()];
 }
 
+#[derive(SlotMappable)]
 pub struct Device {
     key: Key,
     loader: ash::Device,
@@ -40,11 +45,11 @@ impl Device {
         surface_key: surface::Key,
         physical_device_key: physical::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_surface = surface::slotmap::read()?;
+        let slotmap_surface = Surface::slotmap().read()?;
         let surface = slotmap_surface
             .get(surface_key)
             .ok_or_else(|| utils::make_error("surface not found"))?;
-        let slotmap_physical_device = physical::slotmap::read()?;
+        let slotmap_physical_device = PhysicalDevice::slotmap().read()?;
         let physical_device = slotmap_physical_device
             .get(physical_device_key)
             .ok_or_else(|| utils::make_error("physical device not found"))?;
@@ -56,7 +61,7 @@ impl Device {
                 utils::make_error("surface and physical device parents must be the same").into(),
             );
         }
-        let slotmap_instance = instance::slotmap::read()?;
+        let slotmap_instance = Instance::slotmap().read()?;
         let instance = slotmap_instance
             .get(surface_instance)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -127,7 +132,14 @@ impl Device {
         for create_info in self.queue_create_infos.iter() {
             let range = 0..create_info.queue_count;
             let vector: Result<Vec<_>, _> = range
-                .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
+                .map(|index| unsafe {
+                    Queue::new(
+                        queue::Key::null(),
+                        self.key,
+                        create_info.queue_family_index,
+                        index,
+                    )
+                })
                 .collect();
             vector.map(|vector| queues.extend(vector.into_iter()))?
         }

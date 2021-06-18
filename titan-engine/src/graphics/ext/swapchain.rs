@@ -2,17 +2,30 @@ use std::borrow::Borrow;
 use std::error::Error;
 use std::ffi::CStr;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 use winit::window::Window;
 
-use super::super::{device, instance, surface, utils, Image};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{
+    device::{self, Device, PhysicalDevice},
+    image,
+    instance::Instance,
+    slotmap::SlotMappable,
+    surface,
+    surface::Surface,
+    utils, Image,
+};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
+#[derive(SlotMappable)]
 pub struct Swapchain {
+    key: Key,
     handle: vk::SwapchainKHR,
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
@@ -23,21 +36,22 @@ pub struct Swapchain {
 
 impl Swapchain {
     pub fn new(
+        key: Key,
         window: &Window,
         device_key: device::Key,
         surface_key: surface::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
-        let slotmap_surface = surface::slotmap::read()?;
+        let slotmap_surface = Surface::slotmap().read()?;
         let surface = slotmap_surface
             .get(surface_key)
             .ok_or_else(|| utils::make_error("surface not found"))?;
 
         let physical_device_key = device.parent_physical_device();
-        let slotmap_physical_device = device::physical::slotmap::read()?;
+        let slotmap_physical_device = PhysicalDevice::slotmap().read()?;
         let physical_device = slotmap_physical_device
             .get(physical_device_key)
             .ok_or_else(|| utils::make_error("physical device not found"))?;
@@ -50,7 +64,7 @@ impl Swapchain {
             );
         }
 
-        let slotmap_instance = instance::slotmap::read()?;
+        let slotmap_instance = Instance::slotmap().read()?;
         let instance = slotmap_instance
             .get(surface_instance)
             .ok_or_else(|| utils::make_error("instance not found"))?;
@@ -95,6 +109,7 @@ impl Swapchain {
         let loader = AshSwapchain::new(instance.loader(), device.loader());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
         Ok(Self {
+            key,
             loader,
             handle,
             format: *suitable_format,
@@ -133,7 +148,7 @@ impl Swapchain {
         let handles = unsafe { self.loader.get_swapchain_images(self.handle)? };
         Ok(handles
             .into_iter()
-            .map(|handle| unsafe { Image::from_raw(device, handle) })
+            .map(|handle| unsafe { Image::from_raw(image::Key::null(), device, handle) })
             .collect())
     }
 

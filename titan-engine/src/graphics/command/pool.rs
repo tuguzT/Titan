@@ -1,14 +1,20 @@
 use std::error::Error;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::super::{command::CommandBuffer, device, utils};
+use proc_macro::SlotMappable;
 
-pub use self::slotmap::Key;
+use super::super::{
+    super::slotmap::SlotMappable, command, command::CommandBuffer, device, device::Device, utils,
+};
 
-pub mod slotmap;
+slotmap::new_key_type! {
+    pub struct Key;
+}
 
+#[derive(SlotMappable)]
 pub struct CommandPool {
     key: Key,
     handle: vk::CommandPool,
@@ -21,7 +27,7 @@ impl CommandPool {
         device_key: device::Key,
         create_info: &vk::CommandPoolCreateInfo,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
@@ -47,7 +53,7 @@ impl CommandPool {
         count: u32,
     ) -> Result<Vec<CommandBuffer>, Box<dyn Error>> {
         let device_key = self.parent_device();
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("parent was lost"))?;
@@ -61,7 +67,9 @@ impl CommandPool {
                 .loader()
                 .allocate_command_buffers(&allocate_info)?
                 .into_iter()
-                .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
+                .map(|command_buffer| {
+                    CommandBuffer::new(command::buffer::Key::null(), self.key, command_buffer)
+                })
                 .collect()
         })
     }
@@ -69,7 +77,7 @@ impl CommandPool {
 
 impl Drop for CommandPool {
     fn drop(&mut self) {
-        let slotmap_device = device::slotmap::read();
+        let slotmap_device = Device::slotmap().read();
         let slotmap_device = match slotmap_device {
             Ok(value) => value,
             Err(_) => return,

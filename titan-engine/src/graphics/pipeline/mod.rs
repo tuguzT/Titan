@@ -1,24 +1,32 @@
 use std::error::Error;
 
+use ::slotmap::Key as SlotMapKey;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 pub use layout::PipelineLayout;
+use proc_macro::SlotMappable;
 pub use render_pass::RenderPass;
 
 use super::{
-    device,
+    device::Device,
+    shader,
     shader::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE},
-    swapchain, utils,
+    slotmap::SlotMappable,
+    swapchain::Swapchain,
+    utils,
 };
-
-pub use self::slotmap::Key;
 
 pub mod layout;
 pub mod render_pass;
-pub mod slotmap;
 
+slotmap::new_key_type! {
+    pub struct Key;
+}
+
+#[derive(SlotMappable)]
 pub struct GraphicsPipeline {
+    key: Key,
     handle: vk::Pipeline,
     parent_render_pass: render_pass::Key,
     parent_pipeline_layout: layout::Key,
@@ -26,21 +34,22 @@ pub struct GraphicsPipeline {
 
 impl GraphicsPipeline {
     pub fn new(
+        key: Key,
         render_pass_key: render_pass::Key,
         pipeline_layout_key: layout::Key,
     ) -> Result<Self, Box<dyn Error>> {
-        let slotmap_pipeline_layout = layout::slotmap::read()?;
+        let slotmap_pipeline_layout = PipelineLayout::slotmap().read()?;
         let pipeline_layout = slotmap_pipeline_layout
             .get(pipeline_layout_key)
             .ok_or_else(|| utils::make_error("pipeline layout not found"))?;
 
-        let slotmap_render_pass = render_pass::slotmap::read()?;
+        let slotmap_render_pass = RenderPass::slotmap().read()?;
         let render_pass = slotmap_render_pass
             .get(render_pass_key)
             .ok_or_else(|| utils::make_error("render pass not found"))?;
 
         let swapchain_key = render_pass.parent_swapchain();
-        let slotmap_swapchain = swapchain::slotmap::read()?;
+        let slotmap_swapchain = Swapchain::slotmap().read()?;
         let render_pass_swapchain = slotmap_swapchain
             .get(swapchain_key)
             .ok_or_else(|| utils::make_error("swapchain not found"))?;
@@ -54,13 +63,15 @@ impl GraphicsPipeline {
             .into());
         }
         let device_key = render_pass_device;
-        let slotmap_device = device::slotmap::read()?;
+        let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
 
-        let vert_shader_module = ShaderModule::new(device_key, VERT_SHADER_CODE)?;
-        let frag_shader_module = ShaderModule::new(device_key, FRAG_SHADER_CODE)?;
+        let vert_shader_module =
+            ShaderModule::new(shader::Key::null(), device_key, VERT_SHADER_CODE)?;
+        let frag_shader_module =
+            ShaderModule::new(shader::Key::null(), device_key, FRAG_SHADER_CODE)?;
 
         let shader_stage_info_name = crate::c_str!("main");
         let vert_shader_stage_info = vk::PipelineShaderStageCreateInfo::builder()
@@ -151,6 +162,7 @@ impl GraphicsPipeline {
             })
             .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
         Ok(Self {
+            key,
             handle,
             parent_render_pass: render_pass_key,
             parent_pipeline_layout: pipeline_layout_key,
@@ -172,7 +184,7 @@ impl GraphicsPipeline {
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
-        let slotmap_render_pass = match render_pass::slotmap::read() {
+        let slotmap_render_pass = match RenderPass::slotmap().read() {
             Ok(value) => value,
             Err(_) => return,
         };
@@ -181,7 +193,7 @@ impl Drop for GraphicsPipeline {
             Some(value) => value,
         };
 
-        let slotmap_swapchain = match swapchain::slotmap::read() {
+        let slotmap_swapchain = match Swapchain::slotmap().read() {
             Ok(value) => value,
             Err(_) => return,
         };
@@ -190,7 +202,7 @@ impl Drop for GraphicsPipeline {
             Some(value) => value,
         };
 
-        let slotmap_device = match device::slotmap::read() {
+        let slotmap_device = match Device::slotmap().read() {
             Ok(value) => value,
             Err(_) => return,
         };
