@@ -22,15 +22,16 @@ pub struct CommandBuffer {
 
 impl CommandBuffer {
     pub(super) unsafe fn new(
-        key: Key,
         command_pool_key: command::pool::Key,
         handle: vk::CommandBuffer,
-    ) -> Self {
-        Self {
+    ) -> Result<Key, Box<dyn Error>> {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_command_pool: command_pool_key,
-        }
+        });
+        Ok(key)
     }
 
     pub fn parent_command_pool(&self) -> command::pool::Key {

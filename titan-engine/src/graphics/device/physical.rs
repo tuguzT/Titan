@@ -34,10 +34,9 @@ pub struct PhysicalDevice {
 
 impl PhysicalDevice {
     pub unsafe fn new(
-        key: Key,
         instance_key: instance::Key,
         handle: vk::PhysicalDevice,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_instance = Instance::slotmap().read()?;
         let instance = slotmap_instance
             .get(instance_key)
@@ -56,7 +55,8 @@ impl PhysicalDevice {
             .loader()
             .enumerate_device_extension_properties(handle)?;
 
-        Ok(Self {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             properties,
@@ -66,7 +66,8 @@ impl PhysicalDevice {
             layer_properties,
             extension_properties,
             parent_instance: instance_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> ash::vk::PhysicalDevice {

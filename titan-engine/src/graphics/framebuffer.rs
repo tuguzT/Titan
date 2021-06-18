@@ -24,21 +24,22 @@ pub struct Framebuffer {
 
 impl Framebuffer {
     pub unsafe fn new(
-        key: Key,
         device_key: device::Key,
         create_info: &vk::FramebufferCreateInfo,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
-
         let handle = device.loader().create_framebuffer(create_info, None)?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::Framebuffer {

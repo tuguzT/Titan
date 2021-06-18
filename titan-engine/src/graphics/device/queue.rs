@@ -27,22 +27,24 @@ pub struct Queue {
 
 impl Queue {
     pub(super) unsafe fn new(
-        key: Key,
         device_key: device::Key,
         family_index: u32,
         index: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap = Device::slotmap().read()?;
         let device = slotmap
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
         let handle = device.loader().get_device_queue(family_index, index);
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             family_index,
             handle,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::Queue {

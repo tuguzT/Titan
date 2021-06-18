@@ -4,7 +4,6 @@ use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
 
-use ::slotmap::Key as SlotMapKey;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -41,10 +40,9 @@ unsafe impl Sync for Device {}
 
 impl Device {
     pub fn new(
-        key: Key,
         surface_key: surface::Key,
         physical_device_key: physical::Key,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_surface = Surface::slotmap().read()?;
         let surface = slotmap_surface
             .get(surface_key)
@@ -107,12 +105,14 @@ impl Device {
                 .create_device(physical_device.handle(), &create_info, None)?
         };
 
-        Ok(Self {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             queue_create_infos,
             loader,
             parent_physical_device: physical_device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn loader(&self) -> &ash::Device {
@@ -127,19 +127,12 @@ impl Device {
         self.parent_physical_device
     }
 
-    pub fn enumerate_queues(&self) -> Result<Vec<Queue>, Box<dyn Error>> {
+    pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>, Box<dyn Error>> {
         let mut queues = Vec::new();
         for create_info in self.queue_create_infos.iter() {
             let range = 0..create_info.queue_count;
             let vector: Result<Vec<_>, _> = range
-                .map(|index| unsafe {
-                    Queue::new(
-                        queue::Key::null(),
-                        self.key,
-                        create_info.queue_family_index,
-                        index,
-                    )
-                })
+                .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
                 .collect();
             vector.map(|vector| queues.extend(vector.into_iter()))?
         }

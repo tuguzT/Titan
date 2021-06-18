@@ -28,30 +28,37 @@ pub struct Image {
 
 impl Image {
     pub unsafe fn new(
-        key: Key,
         device_key: device::Key,
         create_info: &vk::ImageCreateInfo,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
         let handle = device.loader().create_image(create_info, None)?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
             owned: false,
-        })
+        });
+        Ok(key)
     }
 
-    pub unsafe fn from_raw(key: Key, device_key: device::Key, handle: vk::Image) -> Self {
-        Self {
+    pub unsafe fn from_raw(
+        device_key: device::Key,
+        handle: vk::Image,
+    ) -> Result<Key, Box<dyn Error>> {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
             owned: true,
-        }
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::Image {

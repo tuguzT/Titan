@@ -23,11 +23,7 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn new(
-        key: Key,
-        instance_key: instance::Key,
-        window: &Window,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key, window: &Window) -> Result<Key, Box<dyn Error>> {
         let slotmap = Instance::slotmap().read()?;
         let instance = slotmap
             .get(instance_key)
@@ -36,12 +32,15 @@ impl Surface {
         let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
         let handle =
             unsafe { create_surface(instance.entry_loader(), instance.loader(), window, None) }?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,
             handle,
             parent_instance: instance_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::SurfaceKHR {

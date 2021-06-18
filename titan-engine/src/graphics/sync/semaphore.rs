@@ -6,8 +6,8 @@ use ash::vk;
 use proc_macro::SlotMappable;
 
 use super::super::{
-    super::slotmap::SlotMappable,
     device::{self, Device},
+    slotmap::SlotMappable,
     utils,
 };
 
@@ -23,7 +23,7 @@ pub struct Semaphore {
 }
 
 impl Semaphore {
-    pub fn new(key: Key, device_key: device::Key) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device_key: device::Key) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
@@ -31,11 +31,14 @@ impl Semaphore {
 
         let create_info = vk::SemaphoreCreateInfo::builder();
         let handle = unsafe { device.loader().create_semaphore(&create_info, None)? };
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::Semaphore {

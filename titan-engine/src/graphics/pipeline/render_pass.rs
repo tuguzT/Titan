@@ -21,7 +21,7 @@ pub struct RenderPass {
 }
 
 impl RenderPass {
-    pub fn new(key: Key, swapchain_key: swapchain::Key) -> Result<Self, Box<dyn Error>> {
+    pub fn new(swapchain_key: swapchain::Key) -> Result<Key, Box<dyn Error>> {
         let slotmap_swapchain = Swapchain::slotmap().read()?;
         let swapchain = slotmap_swapchain
             .get(swapchain_key)
@@ -68,11 +68,14 @@ impl RenderPass {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
         let handle = unsafe { device.loader().create_render_pass(&create_info, None)? };
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_swapchain: swapchain_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::RenderPass {

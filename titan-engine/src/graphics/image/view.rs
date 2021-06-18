@@ -20,10 +20,9 @@ pub struct ImageView {
 
 impl ImageView {
     pub unsafe fn new(
-        key: Key,
         image_key: image::Key,
         create_info: &vk::ImageViewCreateInfo,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_image = Image::slotmap().read()?;
         let image = slotmap_image
             .get(image_key)
@@ -36,11 +35,14 @@ impl ImageView {
             .ok_or_else(|| utils::make_error("device not found"))?;
 
         let handle = device.loader().create_image_view(create_info, None)?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_image: image_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn parent_image(&self) -> image::Key {

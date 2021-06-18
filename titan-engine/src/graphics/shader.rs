@@ -28,7 +28,7 @@ pub struct ShaderModule {
 }
 
 impl ShaderModule {
-    pub fn new(key: Key, device_key: device::Key, code: &[u8]) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device_key: device::Key, code: &[u8]) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
@@ -37,12 +37,15 @@ impl ShaderModule {
         let code = ash::util::read_spv(&mut Cursor::new(code))?;
         let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_slice());
         let handle = unsafe { device.loader().create_shader_module(&create_info, None)? };
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             code,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::ShaderModule {

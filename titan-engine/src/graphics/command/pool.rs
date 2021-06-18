@@ -1,6 +1,5 @@
 use std::error::Error;
 
-use ::slotmap::Key as SlotMapKey;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -23,21 +22,22 @@ pub struct CommandPool {
 
 impl CommandPool {
     pub unsafe fn new(
-        key: Key,
         device_key: device::Key,
         create_info: &vk::CommandPoolCreateInfo,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
-
         let handle = device.loader().create_command_pool(create_info, None)?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::CommandPool {
@@ -51,7 +51,7 @@ impl CommandPool {
     pub fn enumerate_command_buffers(
         &self,
         count: u32,
-    ) -> Result<Vec<CommandBuffer>, Box<dyn Error>> {
+    ) -> Result<Vec<command::buffer::Key>, Box<dyn Error>> {
         let device_key = self.parent_device();
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
@@ -62,16 +62,14 @@ impl CommandPool {
             .command_pool(self.handle())
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(count);
-        Ok(unsafe {
+        unsafe {
             device
                 .loader()
                 .allocate_command_buffers(&allocate_info)?
                 .into_iter()
-                .map(|command_buffer| {
-                    CommandBuffer::new(command::buffer::Key::null(), self.key, command_buffer)
-                })
+                .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
                 .collect()
-        })
+        }
     }
 }
 

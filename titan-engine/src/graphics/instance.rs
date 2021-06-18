@@ -2,7 +2,6 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use ::slotmap::Key as SlotMapKey;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash_window::enumerate_required_extensions;
@@ -43,7 +42,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(key: Key, config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
+    pub fn new(config: &Config, window: &Window) -> Result<Key, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
         let version = match entry_loader.try_enumerate_instance_version()? {
@@ -122,14 +121,16 @@ impl Instance {
             })
             .collect();
 
-        Ok(Self {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             entry_loader,
             instance_loader,
             version,
             layer_properties,
             extension_properties,
-        })
+        });
+        Ok(key)
     }
 
     pub fn version(&self) -> &Version {
@@ -148,13 +149,11 @@ impl Instance {
         self.loader().handle()
     }
 
-    pub fn enumerate_physical_devices(&self) -> Result<Vec<PhysicalDevice>, Box<dyn Error>> {
+    pub fn enumerate_physical_devices(&self) -> Result<Vec<device::physical::Key>, Box<dyn Error>> {
         let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
         handles
             .into_iter()
-            .map(|handle| unsafe {
-                PhysicalDevice::new(device::physical::Key::null(), self.key, handle)
-            })
+            .map(|handle| unsafe { PhysicalDevice::new(self.key, handle) })
             .collect()
     }
 }

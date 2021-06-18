@@ -24,7 +24,7 @@ pub struct DebugUtils {
 }
 
 impl DebugUtils {
-    pub fn new(key: Key, instance_key: instance::Key) -> Result<Self, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key) -> Result<Key, Box<dyn Error>> {
         let slotmap = Instance::slotmap().read()?;
         let instance = slotmap
             .get(instance_key)
@@ -38,12 +38,14 @@ impl DebugUtils {
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
 
-        Ok(Self {
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,
             messenger,
             parent_instance: instance_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn parent_instance(&self) -> instance::Key {

@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use std::error::Error;
 use std::ffi::CStr;
 
-use ::slotmap::Key as SlotMapKey;
 use ash::extensions::khr::Swapchain as AshSwapchain;
 use ash::vk;
 use winit::window::Window;
@@ -36,11 +35,10 @@ pub struct Swapchain {
 
 impl Swapchain {
     pub fn new(
-        key: Key,
         window: &Window,
         device_key: device::Key,
         surface_key: surface::Key,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
@@ -108,7 +106,9 @@ impl Swapchain {
 
         let loader = AshSwapchain::new(instance.loader(), device.loader());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,
             handle,
@@ -116,7 +116,8 @@ impl Swapchain {
             extent: suitable_extent,
             parent_device: device_key,
             parent_surface: surface_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn loader(&self) -> &AshSwapchain {
@@ -143,13 +144,13 @@ impl Swapchain {
         self.extent
     }
 
-    pub fn enumerate_images(&self) -> Result<Vec<Image>, Box<dyn Error>> {
+    pub fn enumerate_images(&self) -> Result<Vec<image::Key>, Box<dyn Error>> {
         let device = self.parent_device();
         let handles = unsafe { self.loader.get_swapchain_images(self.handle)? };
-        Ok(handles
+        handles
             .into_iter()
-            .map(|handle| unsafe { Image::from_raw(image::Key::null(), device, handle) })
-            .collect())
+            .map(|handle| unsafe { Image::from_raw(device, handle) })
+            .collect()
     }
 
     fn pick_format(formats: &Vec<vk::SurfaceFormatKHR>) -> Option<&vk::SurfaceFormatKHR> {

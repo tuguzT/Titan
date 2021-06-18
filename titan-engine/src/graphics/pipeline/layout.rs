@@ -26,26 +26,27 @@ pub struct PipelineLayout {
 
 impl PipelineLayout {
     pub unsafe fn with(
-        key: Key,
         device_key: device::Key,
         create_info: &vk::PipelineLayoutCreateInfo,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_device = Device::slotmap().read()?;
         let device = slotmap_device
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
-
         let handle = device.loader().create_pipeline_layout(create_info, None)?;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_device: device_key,
-        })
+        });
+        Ok(key)
     }
 
-    pub fn new(key: Key, device_key: device::Key) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device_key: device::Key) -> Result<Key, Box<dyn Error>> {
         let create_info = vk::PipelineLayoutCreateInfo::default();
-        unsafe { Self::with(key, device_key, &create_info) }
+        unsafe { Self::with(device_key, &create_info) }
     }
 
     pub fn handle(&self) -> vk::PipelineLayout {

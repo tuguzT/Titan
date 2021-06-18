@@ -1,6 +1,5 @@
 use std::error::Error;
 
-use ::slotmap::Key as SlotMapKey;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -10,7 +9,6 @@ pub use render_pass::RenderPass;
 
 use super::{
     device::Device,
-    shader,
     shader::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE},
     slotmap::SlotMappable,
     swapchain::Swapchain,
@@ -34,10 +32,9 @@ pub struct GraphicsPipeline {
 
 impl GraphicsPipeline {
     pub fn new(
-        key: Key,
         render_pass_key: render_pass::Key,
         pipeline_layout_key: layout::Key,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Key, Box<dyn Error>> {
         let slotmap_pipeline_layout = PipelineLayout::slotmap().read()?;
         let pipeline_layout = slotmap_pipeline_layout
             .get(pipeline_layout_key)
@@ -68,10 +65,11 @@ impl GraphicsPipeline {
             .get(device_key)
             .ok_or_else(|| utils::make_error("device not found"))?;
 
-        let vert_shader_module =
-            ShaderModule::new(shader::Key::null(), device_key, VERT_SHADER_CODE)?;
-        let frag_shader_module =
-            ShaderModule::new(shader::Key::null(), device_key, FRAG_SHADER_CODE)?;
+        let vert_shader_module_key = ShaderModule::new(device_key, VERT_SHADER_CODE)?;
+        let frag_shader_module_key = ShaderModule::new(device_key, FRAG_SHADER_CODE)?;
+        let slotmap_shader = ShaderModule::slotmap().write()?;
+        let vert_shader_module: &ShaderModule = slotmap_shader.get(vert_shader_module_key).unwrap();
+        let frag_shader_module: &ShaderModule = slotmap_shader.get(frag_shader_module_key).unwrap();
 
         let shader_stage_info_name = crate::c_str!("main");
         let vert_shader_stage_info = vk::PipelineShaderStageCreateInfo::builder()
@@ -161,12 +159,15 @@ impl GraphicsPipeline {
                     .ok_or_else(|| utils::make_error("graphics pipeline was not created"))
             })
             .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
-        Ok(Self {
+
+        let mut slotmap = SlotMappable::slotmap().write()?;
+        let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
             parent_render_pass: render_pass_key,
             parent_pipeline_layout: pipeline_layout_key,
-        })
+        });
+        Ok(key)
     }
 
     pub fn handle(&self) -> vk::Pipeline {
