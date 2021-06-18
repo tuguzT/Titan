@@ -45,9 +45,14 @@ impl Instance {
     pub fn new(config: &Config, window: &Window) -> Result<Key, Box<dyn Error>> {
         // Get entry loader and Vulkan API version
         let entry_loader = unsafe { ash::Entry::new()? };
-        let version = match entry_loader.try_enumerate_instance_version()? {
+        let try_enumerate_version = entry_loader.try_enumerate_instance_version()?;
+        let version = match try_enumerate_version {
             Some(version) => utils::from_vk_version(version),
             None => utils::from_vk_version(vk::API_VERSION_1_0),
+        };
+        let api_version = match try_enumerate_version {
+            Some(_) => vk::API_VERSION_1_2,
+            None => vk::API_VERSION_1_0,
         };
 
         // Get available instance properties
@@ -65,7 +70,7 @@ impl Instance {
             .engine_version(engine_version)
             .application_name(&application_name)
             .engine_name(&engine_name)
-            .api_version(vk::API_VERSION_1_2);
+            .api_version(api_version);
 
         // Initialize containers for layers' and extensions' names
         let _available_layer_properties_names = available_layer_properties

@@ -130,11 +130,10 @@ impl Device {
     pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>, Box<dyn Error>> {
         let mut queues = Vec::new();
         for create_info in self.queue_create_infos.iter() {
-            let range = 0..create_info.queue_count;
-            let vector: Result<Vec<_>, _> = range
+            let vector = (0..create_info.queue_count)
                 .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
-                .collect();
-            vector.map(|vector| queues.extend(vector.into_iter()))?
+                .collect::<Result<Vec<_>, _>>()?;
+            queues.extend(vector.into_iter());
         }
         Ok(queues)
     }

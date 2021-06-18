@@ -55,6 +55,10 @@ where
                 _ => (),
             },
             Event::MainEventsCleared => {
+                let size = window.inner_size();
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
                 if let Err(error) = renderer.render() {
                     log::error!("{:?}", error);
                     *control_flow = ControlFlow::Exit;
