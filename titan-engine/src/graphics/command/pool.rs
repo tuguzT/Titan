@@ -48,10 +48,10 @@ impl CommandPool {
         self.parent_device
     }
 
-    pub fn enumerate_command_buffers(&self, count: u32) -> Result<Vec<command::buffer::Key>> {
+    pub fn allocate_command_buffers(&self, count: u32) -> Result<Vec<command::buffer::Key>> {
         let device_key = self.parent_device();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let device: &Device = slotmap_device.get(device_key).expect("parent was lost");
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         let allocate_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(self.handle())
@@ -65,6 +65,29 @@ impl CommandPool {
                 .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
                 .collect()
         }
+    }
+
+    pub unsafe fn free_command_buffers(&self, command_buffers: &[command::buffer::Key]) {
+        let device_key = self.parent_device();
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
+
+        let mut slotmap_command_buffer = SlotMappable::slotmap().write().unwrap();
+        let command_buffers: Vec<_> = command_buffers
+            .iter()
+            .map(|key| {
+                let command_buffer: &CommandBuffer = slotmap_command_buffer
+                    .get(*key)
+                    .expect("command buffer not found");
+                let handle = command_buffer.handle();
+                slotmap_command_buffer.remove(*key);
+                handle
+            })
+            .collect();
+
+        device
+            .loader()
+            .free_command_buffers(self.handle(), command_buffers.as_slice());
     }
 }
 

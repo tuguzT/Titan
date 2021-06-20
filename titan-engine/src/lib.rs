@@ -7,7 +7,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use config::Config;
-use graphics::{slotmap, Renderer};
+use graphics::Renderer;
 
 pub mod config;
 pub mod error;
@@ -69,11 +69,7 @@ where
             }
             Event::LoopDestroyed => {
                 callback(MyEvent::Destroyed);
-                if let Err(error) = renderer.wait() {
-                    log::error!("{:?}", error);
-                }
                 unsafe { ManuallyDrop::drop(&mut renderer) }
-                slotmap::clear();
                 log::info!(target: "titan_engine::window", "closing this application");
             }
             _ => (),

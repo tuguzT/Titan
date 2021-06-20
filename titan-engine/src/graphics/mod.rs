@@ -25,7 +25,7 @@ mod image;
 mod instance;
 mod pipeline;
 mod shader;
-pub(crate) mod slotmap;
+mod slotmap;
 mod surface;
 mod sync;
 mod utils;
@@ -208,7 +208,7 @@ impl Renderer {
             let command_pool: &CommandPool = slotmap_command_pool
                 .get(command_pool)
                 .expect("command pool not found");
-            command_pool.enumerate_command_buffers(swapchain_image_views.len() as u32)?
+            command_pool.allocate_command_buffers(swapchain_image_views.len() as u32)?
         };
 
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
@@ -400,5 +400,94 @@ impl Renderer {
             device.loader().device_wait_idle()?;
         }
         Ok(())
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        self.wait().unwrap();
+        {
+            let mut slotmap = Fence::slotmap().write().unwrap();
+            for fence in self.in_flight_fences.iter() {
+                slotmap.remove(*fence);
+            }
+        }
+        {
+            let mut slotmap = Semaphore::slotmap().write().unwrap();
+            for semaphore in self.render_finished_semaphores.iter() {
+                slotmap.remove(*semaphore);
+            }
+            for semaphore in self.image_available_semaphores.iter() {
+                slotmap.remove(*semaphore);
+            }
+        }
+        unsafe {
+            let mut slotmap = SlotMappable::slotmap().write().unwrap();
+            let command_pool: &CommandPool = slotmap
+                .get(self.command_pool)
+                .expect("command pool not found");
+            command_pool.free_command_buffers(self.command_buffers.as_slice());
+            slotmap.remove(self.command_pool);
+        }
+        {
+            let mut slotmap = Framebuffer::slotmap().write().unwrap();
+            for framebuffer in self.framebuffers.iter() {
+                slotmap.remove(*framebuffer);
+            }
+        }
+        {
+            let mut slotmap = GraphicsPipeline::slotmap().write().unwrap();
+            slotmap.remove(self.graphics_pipeline);
+        }
+        {
+            let mut slotmap = PipelineLayout::slotmap().write().unwrap();
+            slotmap.remove(self.pipeline_layout);
+        }
+        {
+            let mut slotmap = RenderPass::slotmap().write().unwrap();
+            slotmap.remove(self.render_pass);
+        }
+        {
+            let mut slotmap = ImageView::slotmap().write().unwrap();
+            for image_view in self.swapchain_image_views.iter() {
+                slotmap.remove(*image_view);
+            }
+        }
+        {
+            let mut slotmap = Image::slotmap().write().unwrap();
+            for image in self.swapchain_images.iter() {
+                slotmap.remove(*image);
+            }
+        }
+        {
+            let mut slotmap = Swapchain::slotmap().write().unwrap();
+            slotmap.remove(self.swapchain);
+        }
+        {
+            let mut slotmap = Queue::slotmap().write().unwrap();
+            for queue in self.device_queues.iter() {
+                slotmap.remove(*queue);
+            }
+        }
+        {
+            let mut slotmap = Device::slotmap().write().unwrap();
+            slotmap.remove(self.device);
+        }
+        {
+            let mut slotmap = PhysicalDevice::slotmap().write().unwrap();
+            slotmap.remove(self.physical_device);
+        }
+        {
+            let mut slotmap = Surface::slotmap().write().unwrap();
+            slotmap.remove(self.surface);
+        }
+        if let Some(debug_utils) = self.debug_utils {
+            let mut slotmap = DebugUtils::slotmap().write().unwrap();
+            slotmap.remove(debug_utils);
+        }
+        {
+            let mut slotmap = Instance::slotmap().write().unwrap();
+            slotmap.remove(self.instance);
+        }
     }
 }
