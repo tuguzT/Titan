@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{ext::Swapchain, swapchain, CommandBuffer, Device, SlotMappable};
 
@@ -19,7 +19,7 @@ pub struct RenderPass {
 }
 
 impl RenderPass {
-    pub fn new(swapchain_key: swapchain::Key) -> Result<Key, Box<dyn Error>> {
+    pub fn new(swapchain_key: swapchain::Key) -> Result<Key> {
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
@@ -87,7 +87,7 @@ impl RenderPass {
         command_buffer: &CommandBuffer,
         begin_info: &vk::RenderPassBeginInfo,
         contents: vk::SubpassContents,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         let swapchain_key = self.parent_swapchain();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
@@ -103,7 +103,7 @@ impl RenderPass {
             .cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
     }
 
-    pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<(), Box<dyn Error>> {
+    pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<()> {
         let swapchain_key = self.parent_swapchain();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain

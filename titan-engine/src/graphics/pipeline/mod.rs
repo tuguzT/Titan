@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -7,12 +5,13 @@ pub use layout::PipelineLayout;
 use proc_macro::SlotMappable;
 pub use render_pass::RenderPass;
 
+use crate::error::{Error, Result};
+
 use super::{
     device::Device,
     shader::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE},
     slotmap::SlotMappable,
     swapchain::Swapchain,
-    utils,
 };
 
 pub mod layout;
@@ -31,10 +30,7 @@ pub struct GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
-    pub fn new(
-        render_pass_key: render_pass::Key,
-        pipeline_layout_key: layout::Key,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub fn new(render_pass_key: render_pass::Key, pipeline_layout_key: layout::Key) -> Result<Key> {
         let slotmap_pipeline_layout = SlotMappable::slotmap().read().unwrap();
         let pipeline_layout: &PipelineLayout = slotmap_pipeline_layout
             .get(pipeline_layout_key)
@@ -54,10 +50,10 @@ impl GraphicsPipeline {
         let render_pass_device = render_pass_swapchain.parent_device();
         let pipeline_layout_device = pipeline_layout.parent_device();
         if render_pass_device != pipeline_layout_device {
-            return Err(utils::make_error(
-                "pipeline layout and render pass must have the same parent",
-            )
-            .into());
+            return Err(Error::Other {
+                message: String::from("pipeline layout and render pass must have the same parent"),
+                source: None,
+            });
         }
         let device_key = render_pass_device;
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
@@ -155,12 +151,12 @@ impl GraphicsPipeline {
         };
         let handle = handles
             .map(|handles| {
-                handles
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| utils::make_error("graphics pipeline was not created"))
+                handles.into_iter().next().ok_or_else(|| Error::Other {
+                    message: String::from("graphics pipeline was not created"),
+                    source: None,
+                })
             })
-            .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
+            .map_err(|error| Error::Graphics { result: error.1 })??;
         slotmap_shader.remove(frag_shader_module_key);
         slotmap_shader.remove(vert_shader_module_key);
 

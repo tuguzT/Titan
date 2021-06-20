@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     command::{self, CommandBuffer},
@@ -26,7 +26,7 @@ impl CommandPool {
     pub unsafe fn new(
         device_key: device::Key,
         create_info: &vk::CommandPoolCreateInfo,
-    ) -> Result<Key, Box<dyn Error>> {
+    ) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_command_pool(create_info, None)?;
@@ -48,10 +48,7 @@ impl CommandPool {
         self.parent_device
     }
 
-    pub fn enumerate_command_buffers(
-        &self,
-        count: u32,
-    ) -> Result<Vec<command::buffer::Key>, Box<dyn Error>> {
+    pub fn enumerate_command_buffers(&self, count: u32) -> Result<Vec<command::buffer::Key>> {
         let device_key = self.parent_device();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("parent was lost");

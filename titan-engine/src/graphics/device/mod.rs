@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::error::Error;
 use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_char;
@@ -11,12 +10,13 @@ pub use physical::PhysicalDevice;
 use proc_macro::SlotMappable;
 pub use queue::Queue;
 
+use crate::error::{Error, Result};
+
 use super::{
     ext::Swapchain,
     instance::Instance,
     slotmap::SlotMappable,
     surface::{self, Surface},
-    utils,
 };
 
 pub mod physical;
@@ -43,10 +43,7 @@ unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
 impl Device {
-    pub fn new(
-        surface_key: surface::Key,
-        physical_device_key: physical::Key,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub fn new(surface_key: surface::Key, physical_device_key: physical::Key) -> Result<Key> {
         let slotmap_surface = SlotMappable::slotmap().read().unwrap();
         let surface: &Surface = slotmap_surface.get(surface_key).expect("surface not found");
         let slotmap_physical_device = SlotMappable::slotmap().read().unwrap();
@@ -57,9 +54,10 @@ impl Device {
         let surface_instance = surface.parent_instance();
         let physical_device_instance = physical_device.parent_instance();
         if surface_instance != physical_device_instance {
-            return Err(
-                utils::make_error("surface and physical device parents must be the same").into(),
-            );
+            return Err(Error::Other {
+                message: String::from("surface and physical device parents must be the same"),
+                source: None,
+            });
         }
         let slotmap_instance = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap_instance
@@ -129,12 +127,12 @@ impl Device {
         self.parent_physical_device
     }
 
-    pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>, Box<dyn Error>> {
+    pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>> {
         let mut queues = Vec::new();
         for create_info in self.queue_create_infos.iter() {
             let vector = (0..create_info.queue_count)
                 .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>>>()?;
             queues.extend(vector.into_iter());
         }
         Ok(queues)

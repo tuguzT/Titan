@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::error::Error;
 use std::ffi::CStr;
 use std::os::raw::c_void;
 
@@ -8,6 +7,8 @@ use ash::vk;
 use log::Level;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     instance::{self, Instance},
@@ -27,7 +28,7 @@ pub struct DebugUtils {
 }
 
 impl DebugUtils {
-    pub fn new(instance_key: instance::Key) -> Result<Key, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key) -> Result<Key> {
         let slotmap = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 

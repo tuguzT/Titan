@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
@@ -8,6 +7,7 @@ use winit::window::Window;
 
 use proc_macro::SlotMappable;
 
+use crate::error::{Error, Result};
 use crate::{
     config::ENGINE_VERSION,
     config::{Config, Version, ENGINE_NAME},
@@ -41,9 +41,14 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(config: &Config, window: &Window) -> Result<Key, Box<dyn Error>> {
+    pub fn new(config: &Config, window: &Window) -> Result<Key> {
         // Get entry loader and Vulkan API version
-        let entry_loader = unsafe { ash::Entry::new()? };
+        let entry_loader = unsafe {
+            ash::Entry::new().map_err(|error| Error::Other {
+                message: String::from("Vulkan library cannot be loaded"),
+                source: Some(error.into()),
+            })?
+        };
         let try_enumerate_version = entry_loader.try_enumerate_instance_version()?;
         let version = match try_enumerate_version {
             Some(version) => utils::from_vk_version(version),
@@ -60,8 +65,14 @@ impl Instance {
             entry_loader.enumerate_instance_extension_properties()?;
 
         // Setup application info for Vulkan API
-        let application_name = CString::new(config.name())?;
-        let engine_name = CString::new(ENGINE_NAME)?;
+        let application_name = CString::new(config.name()).map_err(|error| Error::Other {
+            message: error.to_string(),
+            source: Some(error.into()),
+        })?;
+        let engine_name = CString::new(ENGINE_NAME).map_err(|error| Error::Other {
+            message: error.to_string(),
+            source: Some(error.into()),
+        })?;
         let application_version = utils::to_vk_version(&config.version());
         let engine_version = utils::to_vk_version(&ENGINE_VERSION);
         let application_info = vk::ApplicationInfo::builder()
@@ -106,7 +117,14 @@ impl Instance {
             .application_info(&application_info)
             .enabled_layer_names(p_enabled_layer_names.as_slice())
             .enabled_extension_names(p_enabled_extension_names.as_slice());
-        let instance_loader = unsafe { entry_loader.create_instance(&create_info, None)? };
+        let instance_loader = unsafe {
+            entry_loader
+                .create_instance(&create_info, None)
+                .map_err(|error| Error::Other {
+                    message: error.to_string(),
+                    source: Some(error.into()),
+                })?
+        };
 
         // Enumerate enabled layers
         let layer_properties = available_layer_properties
@@ -153,7 +171,7 @@ impl Instance {
         self.loader().handle()
     }
 
-    pub fn enumerate_physical_devices(&self) -> Result<Vec<device::physical::Key>, Box<dyn Error>> {
+    pub fn enumerate_physical_devices(&self) -> Result<Vec<device::physical::Key>> {
         let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
         handles
             .into_iter()

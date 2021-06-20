@@ -1,7 +1,6 @@
 use ash::vk;
 
 use crate::config::Version;
-use crate::error::{Error, ErrorType};
 
 #[macro_export]
 macro_rules! c_str {
@@ -30,9 +29,4 @@ pub fn from_vk_version(version: u32) -> Version {
         vk::version_patch(version),
         String::new(),
     )
-}
-
-#[inline]
-pub fn make_error(message: &'static str) -> Error {
-    Error::new(message, ErrorType::Graphics)
 }

@@ -1,4 +1,4 @@
-use std::error::Error;
+use crate::error::{Error, Result};
 use std::mem::ManuallyDrop;
 
 use winit::dpi::LogicalSize;
@@ -31,7 +31,10 @@ where
             .with_min_inner_size(LogicalSize::new(250, 100))
             .with_visible(false)
             .build(&event_loop)
-            .map_err(|error| error.into()),
+            .map_err(|error| Error::Other {
+                message: String::from("window creation failure"),
+                source: Some(error.into()),
+            }),
     );
     let renderer = get_or_panic(Renderer::new(&config, &window));
     let mut renderer = ManuallyDrop::new(renderer);
@@ -78,7 +81,7 @@ where
     })
 }
 
-fn get_or_panic<T>(value: Result<T, Box<dyn Error>>) -> T {
+fn get_or_panic<T>(value: Result<T>) -> T {
     match value {
         Ok(value) => value,
         Err(error) => {

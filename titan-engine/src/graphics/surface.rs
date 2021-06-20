@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::vk;
 use winit::window::Window;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::{
     instance::{self, Instance},
@@ -26,7 +26,7 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn new(instance_key: instance::Key, window: &Window) -> Result<Key, Box<dyn Error>> {
+    pub fn new(instance_key: instance::Key, window: &Window) -> Result<Key> {
         let slotmap = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 
@@ -56,7 +56,7 @@ impl Surface {
     pub fn physical_device_capabilities(
         &self,
         physical_device: &PhysicalDevice,
-    ) -> Result<vk::SurfaceCapabilitiesKHR, Box<dyn Error>> {
+    ) -> Result<vk::SurfaceCapabilitiesKHR> {
         let capabilities = unsafe {
             self.loader
                 .get_physical_device_surface_capabilities(physical_device.handle(), self.handle)?
@@ -67,7 +67,7 @@ impl Surface {
     pub fn physical_device_formats(
         &self,
         physical_device: &PhysicalDevice,
-    ) -> Result<Vec<vk::SurfaceFormatKHR>, Box<dyn Error>> {
+    ) -> Result<Vec<vk::SurfaceFormatKHR>> {
         let formats = unsafe {
             self.loader
                 .get_physical_device_surface_formats(physical_device.handle(), self.handle)?
@@ -78,7 +78,7 @@ impl Surface {
     pub fn physical_device_present_modes(
         &self,
         physical_device: &PhysicalDevice,
-    ) -> Result<Vec<vk::PresentModeKHR>, Box<dyn Error>> {
+    ) -> Result<Vec<vk::PresentModeKHR>> {
         let present_modes = unsafe {
             self.loader
                 .get_physical_device_surface_present_modes(physical_device.handle(), self.handle)?
@@ -105,7 +105,7 @@ impl Surface {
             })
     }
 
-    pub fn is_suitable(&self, physical_device: &PhysicalDevice) -> Result<bool, Box<dyn Error>> {
+    pub fn is_suitable(&self, physical_device: &PhysicalDevice) -> Result<bool> {
         let formats = self.physical_device_formats(physical_device)?;
         let present_modes = self.physical_device_present_modes(physical_device)?;
         Ok(!formats.is_empty() && !present_modes.is_empty())

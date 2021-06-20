@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
@@ -22,7 +22,7 @@ pub struct Semaphore {
 }
 
 impl Semaphore {
-    pub fn new(device_key: device::Key) -> Result<Key, Box<dyn Error>> {
+    pub fn new(device_key: device::Key) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
 

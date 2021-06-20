@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
@@ -27,7 +27,7 @@ impl Queue {
         device_key: device::Key,
         family_index: u32,
         index: u32,
-    ) -> Result<Key, Box<dyn Error>> {
+    ) -> Result<Key> {
         let slotmap = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap.get(device_key).expect("device not found");
         let handle = device.loader().get_device_queue(family_index, index);

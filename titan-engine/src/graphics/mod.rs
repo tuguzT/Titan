@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 use winit::window::Window;
@@ -15,6 +13,7 @@ use surface::Surface;
 use sync::{fence, semaphore, Fence, Semaphore};
 
 use crate::config::Config;
+use crate::error::{Error, Result};
 
 use self::slotmap::SlotMappable;
 
@@ -57,7 +56,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(config: &Config, window: &Window) -> Result<Self, Box<dyn Error>> {
+    pub fn new(config: &Config, window: &Window) -> Result<Self> {
         let instance = Instance::new(config, window)?;
 
         let debug_utils = if instance::ENABLE_VALIDATION {
@@ -106,7 +105,10 @@ impl Renderer {
             let best_physical_device = *physical_devices
                 .iter()
                 .max_by_key(|&&key| slotmap.get(key))
-                .ok_or_else(|| utils::make_error("no suitable physical devices were found"))?;
+                .ok_or_else(|| Error::Other {
+                    message: String::from("no suitable physical devices were found"),
+                    source: None,
+                })?;
             for &physical_device in physical_devices.iter() {
                 if physical_device != best_physical_device {
                     slotmap.remove(physical_device);
@@ -159,7 +161,7 @@ impl Renderer {
                         });
                     ImageView::new(image_key, &create_info)
                 })
-                .collect::<Result<Vec<_>, _>>()?
+                .collect::<Result<Vec<_>>>()?
         };
 
         let render_pass = RenderPass::new(swapchain)?;
@@ -186,7 +188,7 @@ impl Renderer {
                         .layers(1);
                     Framebuffer::new(device, &create_info)
                 })
-                .collect::<Result<Vec<_>, _>>()?
+                .collect::<Result<Vec<_>>>()?
         };
 
         let command_pool = unsafe {
@@ -269,7 +271,7 @@ impl Renderer {
             (0..MAX_FRAMES_IN_FLIGHT)
                 .into_iter()
                 .map(|_| Semaphore::new(device))
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<Vec<_>>>()
         };
         let image_available_semaphores = create_semaphores()?;
         let render_finished_semaphores = create_semaphores()?;
@@ -278,7 +280,7 @@ impl Renderer {
         let in_flight_fences = (0..MAX_FRAMES_IN_FLIGHT)
             .into_iter()
             .map(|_| Fence::new(device, &fence_create_info))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             instance,
@@ -304,7 +306,7 @@ impl Renderer {
         })
     }
 
-    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn render(&mut self) -> Result<()> {
         let slotmap_fence = SlotMappable::slotmap().read().unwrap();
         let in_flight_fence: &Fence = slotmap_fence
             .get(self.in_flight_fences[self.frame_index])
@@ -391,7 +393,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn wait(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn wait(&mut self) -> Result<()> {
         unsafe {
             let slotmap = SlotMappable::slotmap().read().unwrap();
             let device: &Device = slotmap.get(self.device).expect("device not found");

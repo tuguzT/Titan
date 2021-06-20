@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
@@ -25,7 +25,7 @@ impl PipelineLayout {
     pub unsafe fn with(
         device_key: device::Key,
         create_info: &vk::PipelineLayoutCreateInfo,
-    ) -> Result<Key, Box<dyn Error>> {
+    ) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_pipeline_layout(create_info, None)?;
@@ -39,7 +39,7 @@ impl PipelineLayout {
         Ok(key)
     }
 
-    pub fn new(device_key: device::Key) -> Result<Key, Box<dyn Error>> {
+    pub fn new(device_key: device::Key) -> Result<Key> {
         let create_info = vk::PipelineLayoutCreateInfo::default();
         unsafe { Self::with(device_key, &create_info) }
     }

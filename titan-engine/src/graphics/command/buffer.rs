@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     command::{self, CommandPool},
@@ -26,7 +26,7 @@ impl CommandBuffer {
     pub(super) unsafe fn new(
         command_pool_key: command::pool::Key,
         handle: vk::CommandBuffer,
-    ) -> Result<Key, Box<dyn Error>> {
+    ) -> Result<Key> {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
@@ -44,10 +44,7 @@ impl CommandBuffer {
         self.handle
     }
 
-    pub unsafe fn begin(
-        &self,
-        begin_info: &vk::CommandBufferBeginInfo,
-    ) -> Result<(), Box<dyn Error>> {
+    pub unsafe fn begin(&self, begin_info: &vk::CommandBufferBeginInfo) -> Result<()> {
         let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
         let command_pool: &CommandPool = slotmap_command_pool
             .get(self.parent_command_pool())
@@ -63,7 +60,7 @@ impl CommandBuffer {
             .begin_command_buffer(self.handle, begin_info)?)
     }
 
-    pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
+    pub unsafe fn end(&self) -> Result<()> {
         let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
         let command_pool: &CommandPool = slotmap_command_pool
             .get(self.parent_command_pool())

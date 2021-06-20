@@ -1,10 +1,11 @@
-use std::error::Error;
 use std::io::Cursor;
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::{Error, Result};
 
 use super::{
     device::{self, Device},
@@ -27,11 +28,14 @@ pub struct ShaderModule {
 }
 
 impl ShaderModule {
-    pub fn new(device_key: device::Key, code: &[u8]) -> Result<Key, Box<dyn Error>> {
+    pub fn new(device_key: device::Key, code: &[u8]) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
-        let code = ash::util::read_spv(&mut Cursor::new(code))?;
+        let code = ash::util::read_spv(&mut Cursor::new(code)).map_err(|error| Error::Other {
+            message: error.to_string(),
+            source: Some(error.into()),
+        })?;
         let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_slice());
         let handle = unsafe { device.loader().create_shader_module(&create_info, None)? };
 

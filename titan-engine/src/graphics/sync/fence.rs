@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
@@ -22,10 +22,7 @@ pub struct Fence {
 }
 
 impl Fence {
-    pub fn new(
-        device_key: device::Key,
-        create_info: &vk::FenceCreateInfo,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub fn new(device_key: device::Key, create_info: &vk::FenceCreateInfo) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = unsafe { device.loader().create_fence(&create_info, None)? };

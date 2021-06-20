@@ -1,9 +1,9 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
+
+use crate::error::Result;
 
 use super::super::{
     device::Device,
@@ -23,10 +23,7 @@ pub struct ImageView {
 }
 
 impl ImageView {
-    pub unsafe fn new(
-        image_key: image::Key,
-        create_info: &vk::ImageViewCreateInfo,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub unsafe fn new(image_key: image::Key, create_info: &vk::ImageViewCreateInfo) -> Result<Key> {
         let slotmap_image = SlotMappable::slotmap().read().unwrap();
         let image: &Image = slotmap_image.get(image_key).expect("image not found");
 

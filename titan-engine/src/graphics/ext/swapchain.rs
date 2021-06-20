@@ -1,5 +1,4 @@
 use std::borrow::Borrow;
-use std::error::Error;
 use std::ffi::CStr;
 
 use ash::extensions::khr::Swapchain as AshSwapchain;
@@ -8,14 +7,14 @@ use winit::window::Window;
 
 use proc_macro::SlotMappable;
 
+use crate::error::{Error, Result};
+
 use super::super::{
     device::{self, Device, PhysicalDevice},
-    image,
+    image::{self, Image},
     instance::Instance,
     slotmap::SlotMappable,
-    surface,
-    surface::Surface,
-    utils, Image,
+    surface::{self, Surface},
 };
 
 slotmap::new_key_type! {
@@ -34,11 +33,7 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(
-        window: &Window,
-        device_key: device::Key,
-        surface_key: surface::Key,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub fn new(window: &Window, device_key: device::Key, surface_key: surface::Key) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let slotmap_surface = SlotMappable::slotmap().read().unwrap();
@@ -53,9 +48,10 @@ impl Swapchain {
         let surface_instance = surface.parent_instance();
         let physical_device_instance = physical_device.parent_instance();
         if surface_instance != physical_device_instance {
-            return Err(
-                utils::make_error("surface and physical device parents must be the same").into(),
-            );
+            return Err(Error::Other {
+                message: String::from("surface and physical device parents must be the same"),
+                source: None,
+            });
         }
 
         let slotmap_instance = SlotMappable::slotmap().read().unwrap();
@@ -64,8 +60,10 @@ impl Swapchain {
             .expect("instance not found");
 
         let formats = surface.physical_device_formats(physical_device)?;
-        let suitable_format = Self::pick_format(&formats)
-            .ok_or_else(|| utils::make_error("no suitable format found"))?;
+        let suitable_format = Self::pick_format(&formats).ok_or_else(|| Error::Other {
+            message: String::from("no suitable format found"),
+            source: None,
+        })?;
 
         let present_modes = surface.physical_device_present_modes(physical_device)?;
         let suitable_present_mode = Self::pick_present_mode(&present_modes);
@@ -140,7 +138,7 @@ impl Swapchain {
         self.extent
     }
 
-    pub fn enumerate_images(&self) -> Result<Vec<image::Key>, Box<dyn Error>> {
+    pub fn enumerate_images(&self) -> Result<Vec<image::Key>> {
         let device = self.parent_device();
         let handles = unsafe { self.loader.get_swapchain_images(self.handle)? };
         handles

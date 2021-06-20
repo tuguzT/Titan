@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::error::Error;
 use std::ffi::CStr;
 
 use ash::prelude::VkResult;
@@ -8,11 +7,12 @@ use ash::vk;
 
 use proc_macro::SlotMappable;
 
+use crate::error::{Error, Result};
+
 use super::super::{
     instance::{self, Instance},
     slotmap::SlotMappable,
     surface::Surface,
-    utils,
 };
 
 slotmap::new_key_type! {
@@ -33,10 +33,7 @@ pub struct PhysicalDevice {
 }
 
 impl PhysicalDevice {
-    pub unsafe fn new(
-        instance_key: instance::Key,
-        handle: vk::PhysicalDevice,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub unsafe fn new(instance_key: instance::Key, handle: vk::PhysicalDevice) -> Result<Key> {
         let slotmap_instance = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap_instance
             .get(instance_key)
@@ -130,24 +127,30 @@ impl PhysicalDevice {
         &self.extension_properties
     }
 
-    pub fn graphics_family_index(&self) -> Result<u32, Box<dyn Error>> {
+    pub fn graphics_family_index(&self) -> Result<u32> {
         let graphics_queue_family_properties =
             self.queue_family_properties_with(vk::QueueFlags::GRAPHICS);
         let graphics_family_index = graphics_queue_family_properties
             .peekable()
             .peek()
-            .ok_or_else(|| utils::make_error("no queues with graphics support"))?
+            .ok_or_else(|| Error::Other {
+                message: String::from("no queues with graphics support"),
+                source: None,
+            })?
             .0 as u32;
         Ok(graphics_family_index)
     }
 
-    pub fn present_family_index(&self, surface: &Surface) -> Result<u32, Box<dyn Error>> {
+    pub fn present_family_index(&self, surface: &Surface) -> Result<u32> {
         let present_queue_family_properties =
             surface.physical_device_queue_family_properties_support(&self);
         let present_family_index = present_queue_family_properties
             .peekable()
             .peek()
-            .ok_or_else(|| utils::make_error("no queues with surface present support"))?
+            .ok_or_else(|| Error::Other {
+                message: String::from("no queues with surface present support"),
+                source: None,
+            })?
             .0 as u32;
         Ok(present_family_index)
     }

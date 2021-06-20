@@ -1,10 +1,10 @@
-use std::error::Error;
-
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;
 pub use view::ImageView;
+
+use crate::error::Result;
 
 use super::{
     device::{self, Device},
@@ -26,10 +26,7 @@ pub struct Image {
 }
 
 impl Image {
-    pub unsafe fn new(
-        device_key: device::Key,
-        create_info: &vk::ImageCreateInfo,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub unsafe fn new(device_key: device::Key, create_info: &vk::ImageCreateInfo) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_image(create_info, None)?;
@@ -44,10 +41,7 @@ impl Image {
         Ok(key)
     }
 
-    pub unsafe fn from_raw(
-        device_key: device::Key,
-        handle: vk::Image,
-    ) -> Result<Key, Box<dyn Error>> {
+    pub unsafe fn from_raw(device_key: device::Key, handle: vk::Image) -> Result<Key> {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
