@@ -7,9 +7,8 @@ use proc_macro::SlotMappable;
 pub use view::ImageView;
 
 use super::{
-    super::slotmap::SlotMappable,
     device::{self, Device},
-    image, utils,
+    slotmap::SlotMappable,
 };
 
 slotmap::new_key_type! {
@@ -31,13 +30,11 @@ impl Image {
         device_key: device::Key,
         create_info: &vk::ImageCreateInfo,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_image(create_info, None)?;
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -51,7 +48,7 @@ impl Image {
         device_key: device::Key,
         handle: vk::Image,
     ) -> Result<Key, Box<dyn Error>> {
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -72,14 +69,10 @@ impl Image {
 
 impl Drop for Image {
     fn drop(&mut self) {
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(self.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(self.parent_device())
+            .expect("device not found");
         if !self.owned {
             unsafe { device.loader().destroy_image(self.handle, None) }
         }

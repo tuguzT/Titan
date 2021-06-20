@@ -37,10 +37,10 @@ impl PhysicalDevice {
         instance_key: instance::Key,
         handle: vk::PhysicalDevice,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_instance = Instance::slotmap().read()?;
-        let instance = slotmap_instance
+        let slotmap_instance = SlotMappable::slotmap().read().unwrap();
+        let instance: &Instance = slotmap_instance
             .get(instance_key)
-            .ok_or_else(|| utils::make_error("instance not found"))?;
+            .expect("instance not found");
 
         let properties = instance.loader().get_physical_device_properties(handle);
         let features = instance.loader().get_physical_device_features(handle);
@@ -55,7 +55,7 @@ impl PhysicalDevice {
             .loader()
             .enumerate_device_extension_properties(handle)?;
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,

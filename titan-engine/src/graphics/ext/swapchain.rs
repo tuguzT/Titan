@@ -39,20 +39,16 @@ impl Swapchain {
         device_key: device::Key,
         surface_key: surface::Key,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
-        let slotmap_surface = Surface::slotmap().read()?;
-        let surface = slotmap_surface
-            .get(surface_key)
-            .ok_or_else(|| utils::make_error("surface not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
+        let slotmap_surface = SlotMappable::slotmap().read().unwrap();
+        let surface: &Surface = slotmap_surface.get(surface_key).expect("surface not found");
 
         let physical_device_key = device.parent_physical_device();
-        let slotmap_physical_device = PhysicalDevice::slotmap().read()?;
-        let physical_device = slotmap_physical_device
+        let slotmap_physical_device = SlotMappable::slotmap().read().unwrap();
+        let physical_device: &PhysicalDevice = slotmap_physical_device
             .get(physical_device_key)
-            .ok_or_else(|| utils::make_error("physical device not found"))?;
+            .expect("physical device not found");
 
         let surface_instance = surface.parent_instance();
         let physical_device_instance = physical_device.parent_instance();
@@ -62,10 +58,10 @@ impl Swapchain {
             );
         }
 
-        let slotmap_instance = Instance::slotmap().read()?;
-        let instance = slotmap_instance
+        let slotmap_instance = SlotMappable::slotmap().read().unwrap();
+        let instance: &Instance = slotmap_instance
             .get(surface_instance)
-            .ok_or_else(|| utils::make_error("instance not found"))?;
+            .expect("instance not found");
 
         let formats = surface.physical_device_formats(physical_device)?;
         let suitable_format = Self::pick_format(&formats)
@@ -107,7 +103,7 @@ impl Swapchain {
         let loader = AshSwapchain::new(instance.loader(), device.loader());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,

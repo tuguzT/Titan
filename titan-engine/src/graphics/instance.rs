@@ -4,7 +4,6 @@ use std::os::raw::c_char;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
-use ash_window::enumerate_required_extensions;
 use winit::window::Window;
 
 use proc_macro::SlotMappable;
@@ -79,7 +78,7 @@ impl Instance {
         let mut available_extension_properties_names = available_extension_properties
             .iter()
             .map(|item| unsafe { CStr::from_ptr(item.extension_name.as_ptr()) });
-        let mut enabled_layer_names: Vec<&CStr> = Vec::new();
+        let mut enabled_layer_names = Vec::new();
         let mut enabled_extension_names = Vec::new();
 
         // Push names' pointers into containers if validation was enabled
@@ -91,7 +90,7 @@ impl Instance {
         }
 
         // Push extensions' names for surface
-        let surface_extensions_names = enumerate_required_extensions(window)?;
+        let surface_extensions_names = ash_window::enumerate_required_extensions(window)?;
         enabled_extension_names.extend(surface_extensions_names.into_iter());
 
         // Initialize instance create info and get an instance
@@ -126,7 +125,7 @@ impl Instance {
             })
             .collect();
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             entry_loader,

@@ -6,7 +6,9 @@ use ash::vk;
 use proc_macro::SlotMappable;
 
 use super::super::{
-    super::slotmap::SlotMappable, command, command::CommandBuffer, device, device::Device, utils,
+    command::{self, CommandBuffer},
+    device::{self, Device},
+    slotmap::SlotMappable,
 };
 
 slotmap::new_key_type! {
@@ -25,13 +27,11 @@ impl CommandPool {
         device_key: device::Key,
         create_info: &vk::CommandPoolCreateInfo,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_command_pool(create_info, None)?;
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -53,10 +53,8 @@ impl CommandPool {
         count: u32,
     ) -> Result<Vec<command::buffer::Key>, Box<dyn Error>> {
         let device_key = self.parent_device();
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("parent was lost");
 
         let allocate_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(self.handle())
@@ -75,15 +73,10 @@ impl CommandPool {
 
 impl Drop for CommandPool {
     fn drop(&mut self) {
-        let slotmap_device = Device::slotmap().read();
-        let slotmap_device = match slotmap_device {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(self.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(self.parent_device())
+            .expect("device not found");
         unsafe { device.loader().destroy_command_pool(self.handle, None) }
     }
 }

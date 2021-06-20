@@ -5,9 +5,7 @@ use ash::vk;
 
 use proc_macro::SlotMappable;
 
-use super::super::{
-    command::CommandBuffer, device::Device, ext::Swapchain, slotmap::SlotMappable, swapchain, utils,
-};
+use super::super::{ext::Swapchain, swapchain, CommandBuffer, Device, SlotMappable};
 
 slotmap::new_key_type! {
     pub struct Key;
@@ -22,16 +20,14 @@ pub struct RenderPass {
 
 impl RenderPass {
     pub fn new(swapchain_key: swapchain::Key) -> Result<Key, Box<dyn Error>> {
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let swapchain = slotmap_swapchain
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
-            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+            .expect("swapchain not found");
 
         let device_key = swapchain.parent_device();
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         let color_attachment = vk::AttachmentDescription::builder()
             .format(swapchain.format().format)
@@ -69,7 +65,7 @@ impl RenderPass {
             .dependencies(&dependencies);
         let handle = unsafe { device.loader().create_render_pass(&create_info, None)? };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -93,16 +89,14 @@ impl RenderPass {
         contents: vk::SubpassContents,
     ) -> Result<(), Box<dyn Error>> {
         let swapchain_key = self.parent_swapchain();
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let swapchain = slotmap_swapchain
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
-            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+            .expect("swapchain not found");
 
         let device_key = swapchain.parent_device();
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         Ok(device
             .loader()
@@ -111,16 +105,14 @@ impl RenderPass {
 
     pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<(), Box<dyn Error>> {
         let swapchain_key = self.parent_swapchain();
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let swapchain = slotmap_swapchain
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
-            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+            .expect("swapchain not found");
 
         let device_key = swapchain.parent_device();
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         Ok(device.loader().cmd_end_render_pass(command_buffer.handle()))
     }
@@ -129,24 +121,14 @@ impl RenderPass {
 impl Drop for RenderPass {
     fn drop(&mut self) {
         let swapchain_key = self.parent_swapchain();
-        let slotmap_swapchain = match Swapchain::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let swapchain = match slotmap_swapchain.get(swapchain_key) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
+            .get(swapchain_key)
+            .expect("swapchain not found");
 
         let device_key = swapchain.parent_device();
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(device_key) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         unsafe { device.loader().destroy_render_pass(self.handle, None) }
     }

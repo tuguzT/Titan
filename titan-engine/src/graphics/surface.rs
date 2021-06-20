@@ -1,12 +1,15 @@
 use std::error::Error;
 
 use ash::vk;
-use ash_window::create_surface;
 use winit::window::Window;
 
 use proc_macro::SlotMappable;
 
-use super::{instance, instance::Instance, slotmap::SlotMappable, utils, PhysicalDevice};
+use super::{
+    instance::{self, Instance},
+    slotmap::SlotMappable,
+    PhysicalDevice,
+};
 
 slotmap::new_key_type! {
     pub struct Key;
@@ -24,16 +27,15 @@ pub struct Surface {
 
 impl Surface {
     pub fn new(instance_key: instance::Key, window: &Window) -> Result<Key, Box<dyn Error>> {
-        let slotmap = Instance::slotmap().read()?;
-        let instance = slotmap
-            .get(instance_key)
-            .ok_or_else(|| utils::make_error("instance not found"))?;
+        let slotmap = SlotMappable::slotmap().read().unwrap();
+        let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 
         let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
-        let handle =
-            unsafe { create_surface(instance.entry_loader(), instance.loader(), window, None) }?;
+        let handle = unsafe {
+            ash_window::create_surface(instance.entry_loader(), instance.loader(), window, None)?
+        };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,

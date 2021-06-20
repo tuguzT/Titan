@@ -6,9 +6,8 @@ use ash::vk;
 use proc_macro::SlotMappable;
 
 use super::super::{
-    super::slotmap::SlotMappable,
     device::{self, Device},
-    utils,
+    slotmap::SlotMappable,
 };
 
 slotmap::new_key_type! {
@@ -27,13 +26,11 @@ impl Fence {
         device_key: device::Key,
         create_info: &vk::FenceCreateInfo,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = unsafe { device.loader().create_fence(&create_info, None)? };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -53,14 +50,10 @@ impl Fence {
 
 impl Drop for Fence {
     fn drop(&mut self) {
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(self.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(self.parent_device())
+            .expect("device not found");
         unsafe { device.loader().destroy_fence(self.handle, None) }
     }
 }

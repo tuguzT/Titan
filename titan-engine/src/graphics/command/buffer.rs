@@ -6,7 +6,9 @@ use ash::vk;
 use proc_macro::SlotMappable;
 
 use super::super::{
-    super::slotmap::SlotMappable, command, command::CommandPool, device::Device, utils,
+    command::{self, CommandPool},
+    device::Device,
+    slotmap::SlotMappable,
 };
 
 slotmap::new_key_type! {
@@ -25,7 +27,7 @@ impl CommandBuffer {
         command_pool_key: command::pool::Key,
         handle: vk::CommandBuffer,
     ) -> Result<Key, Box<dyn Error>> {
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -46,15 +48,15 @@ impl CommandBuffer {
         &self,
         begin_info: &vk::CommandBufferBeginInfo,
     ) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = CommandPool::slotmap().read()?;
-        let command_pool = slotmap_command_pool
+        let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
+        let command_pool: &CommandPool = slotmap_command_pool
             .get(self.parent_command_pool())
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
+            .expect("parent was lost");
 
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
             .get(command_pool.parent_device())
-            .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+            .expect("command pool parent was lost");
 
         Ok(device
             .loader()
@@ -62,15 +64,15 @@ impl CommandBuffer {
     }
 
     pub unsafe fn end(&self) -> Result<(), Box<dyn Error>> {
-        let slotmap_command_pool = CommandPool::slotmap().read()?;
-        let command_pool = slotmap_command_pool
+        let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
+        let command_pool: &CommandPool = slotmap_command_pool
             .get(self.parent_command_pool())
-            .ok_or_else(|| utils::make_error("parent was lost"))?;
+            .expect("parent was lost");
 
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
             .get(command_pool.parent_device())
-            .ok_or_else(|| utils::make_error("command pool parent was lost"))?;
+            .expect("command pool parent was lost");
 
         Ok(device.loader().end_command_buffer(self.handle)?)
     }

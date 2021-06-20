@@ -71,20 +71,22 @@ impl Renderer {
 
         let physical_device = {
             let physical_devices: Vec<_> = {
-                let slotmap = Surface::slotmap().read()?;
-                let surface: &Surface = slotmap.get(surface).unwrap();
-                let slotmap = Instance::slotmap().read()?;
-                let instance: &Instance = slotmap.get(instance).unwrap();
+                let slotmap = SlotMappable::slotmap().read().unwrap();
+                let surface: &Surface = slotmap.get(surface).expect("surface not found");
+                let slotmap = SlotMappable::slotmap().read().unwrap();
+                let instance: &Instance = slotmap.get(instance).expect("instance not found");
 
                 let physical_devices = instance.enumerate_physical_devices()?;
-                let mut slotmap = PhysicalDevice::slotmap().write()?;
+                let mut slotmap = SlotMappable::slotmap().write().unwrap();
                 let retain = physical_devices
                     .iter()
-                    .filter(|&&key| {
-                        let value: &PhysicalDevice = slotmap.get(key).unwrap();
-                        let iter = surface.physical_device_queue_family_properties_support(value);
-                        value.is_suitable()
-                            && surface.is_suitable(value).unwrap_or(false)
+                    .filter(|&key| {
+                        let physical_device: &PhysicalDevice =
+                            slotmap.get(*key).expect("physical device not found");
+                        let iter = surface
+                            .physical_device_queue_family_properties_support(physical_device);
+                        physical_device.is_suitable()
+                            && surface.is_suitable(physical_device).unwrap_or(false)
                             && iter.peekable().peek().is_some()
                     })
                     .map(|key| *key)
@@ -100,7 +102,7 @@ impl Renderer {
                 "enumerated {} suitable physical devices",
                 physical_devices.len(),
             );
-            let mut slotmap = PhysicalDevice::slotmap().write()?;
+            let mut slotmap = PhysicalDevice::slotmap().write().unwrap();
             let best_physical_device = *physical_devices
                 .iter()
                 .max_by_key(|&&key| slotmap.get(key))
@@ -115,25 +117,29 @@ impl Renderer {
 
         let device = Device::new(surface, physical_device)?;
         let device_queues = {
-            let slotmap = Device::slotmap().read()?;
-            let device: &Device = slotmap.get(device).unwrap();
+            let slotmap = SlotMappable::slotmap().read().unwrap();
+            let device: &Device = slotmap.get(device).expect("device not found");
             device.enumerate_queues()?
         };
 
         let swapchain = Swapchain::new(window, device, surface)?;
         let swapchain_images = {
-            let slotmap_swapchain = Swapchain::slotmap().read()?;
-            let swapchain: &Swapchain = slotmap_swapchain.get(swapchain).unwrap();
+            let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+            let swapchain: &Swapchain = slotmap_swapchain
+                .get(swapchain)
+                .expect("swapchain not found");
             swapchain.enumerate_images()?
         };
         let swapchain_image_views = {
-            let slotmap_swapchain = Swapchain::slotmap().read()?;
-            let swapchain: &Swapchain = slotmap_swapchain.get(swapchain).unwrap();
-            let slotmap_image = Image::slotmap().read()?;
+            let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+            let swapchain: &Swapchain = slotmap_swapchain
+                .get(swapchain)
+                .expect("swapchain not found");
+            let slotmap_image = SlotMappable::slotmap().read().unwrap();
             swapchain_images
                 .iter()
                 .map(|&image_key| unsafe {
-                    let image = slotmap_image.get(image_key).unwrap();
+                    let image: &Image = slotmap_image.get(image_key).expect("image not found");
                     let create_info = vk::ImageViewCreateInfo::builder()
                         .image(image.handle())
                         .view_type(vk::ImageViewType::TYPE_2D)
@@ -161,15 +167,16 @@ impl Renderer {
         let graphics_pipeline = GraphicsPipeline::new(render_pass, pipeline_layout)?;
 
         let framebuffers = {
-            let slotmap = RenderPass::slotmap().read()?;
-            let render_pass: &RenderPass = slotmap.get(render_pass).unwrap();
-            let slotmap = Swapchain::slotmap().read()?;
-            let swapchain: &Swapchain = slotmap.get(swapchain).unwrap();
-            let slotmap = ImageView::slotmap().read()?;
+            let slotmap = SlotMappable::slotmap().read().unwrap();
+            let render_pass: &RenderPass = slotmap.get(render_pass).expect("render pass not found");
+            let slotmap = SlotMappable::slotmap().read().unwrap();
+            let swapchain: &Swapchain = slotmap.get(swapchain).expect("swapchain not found");
+            let slotmap = SlotMappable::slotmap().read().unwrap();
             swapchain_image_views
                 .iter()
                 .map(|&image_view| unsafe {
-                    let image_view: &ImageView = slotmap.get(image_view).unwrap();
+                    let image_view: &ImageView =
+                        slotmap.get(image_view).expect("image view not found");
                     let attachments = [image_view.handle()];
                     let create_info = vk::FramebufferCreateInfo::builder()
                         .attachments(&attachments)
@@ -184,8 +191,10 @@ impl Renderer {
 
         let command_pool = unsafe {
             let graphics_queue_family_index = {
-                let slotmap = PhysicalDevice::slotmap().read()?;
-                let physical_device: &PhysicalDevice = slotmap.get(physical_device).unwrap();
+                let slotmap = SlotMappable::slotmap().read().unwrap();
+                let physical_device: &PhysicalDevice = slotmap
+                    .get(physical_device)
+                    .expect("physical device not found");
                 physical_device.graphics_family_index().unwrap()
             };
             let command_pool_create_info = vk::CommandPoolCreateInfo::builder()
@@ -193,24 +202,36 @@ impl Renderer {
             CommandPool::new(device, &command_pool_create_info)?
         };
         let command_buffers = {
-            let slotmap_command_pool = CommandPool::slotmap().read()?;
-            let command_pool: &CommandPool = slotmap_command_pool.get(command_pool).unwrap();
+            let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
+            let command_pool: &CommandPool = slotmap_command_pool
+                .get(command_pool)
+                .expect("command pool not found");
             command_pool.enumerate_command_buffers(swapchain_image_views.len() as u32)?
         };
 
-        let slotmap_device = Device::slotmap().read()?;
-        let slotmap_command_buffer = CommandBuffer::slotmap().read()?;
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let slotmap_render_pass = RenderPass::slotmap().read()?;
-        let slotmap_framebuffer = Framebuffer::slotmap().read()?;
-        let slotmap_graphics_pipeline = GraphicsPipeline::slotmap().read()?;
-        let render_pass_ref = slotmap_render_pass.get(render_pass).unwrap();
-        let swapchain_ref = slotmap_swapchain.get(swapchain).unwrap();
-        let graphics_pipeline_ref = slotmap_graphics_pipeline.get(graphics_pipeline).unwrap();
-        let device_ref = slotmap_device.get(device).unwrap();
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let slotmap_command_buffer = SlotMappable::slotmap().read().unwrap();
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
+        let slotmap_framebuffer = SlotMappable::slotmap().read().unwrap();
+        let slotmap_graphics_pipeline = SlotMappable::slotmap().read().unwrap();
+        let render_pass_ref: &RenderPass = slotmap_render_pass
+            .get(render_pass)
+            .expect("render pass not found");
+        let swapchain_ref: &Swapchain = slotmap_swapchain
+            .get(swapchain)
+            .expect("swapchain not found");
+        let graphics_pipeline_ref: &GraphicsPipeline = slotmap_graphics_pipeline
+            .get(graphics_pipeline)
+            .expect("graphics pipeline not found");
+        let device_ref: &Device = slotmap_device.get(device).expect("device not found");
         for (index, command_buffer) in command_buffers.iter().enumerate() {
-            let command_buffer = slotmap_command_buffer.get(*command_buffer).unwrap();
-            let framebuffer = slotmap_framebuffer.get(framebuffers[index]).unwrap();
+            let command_buffer: &CommandBuffer = slotmap_command_buffer
+                .get(*command_buffer)
+                .expect("command buffer not found");
+            let framebuffer: &Framebuffer = slotmap_framebuffer
+                .get(framebuffers[index])
+                .expect("framebuffer not found");
             let begin_info = vk::CommandBufferBeginInfo::builder();
             unsafe {
                 command_buffer.begin(&begin_info)?;
@@ -284,27 +305,31 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        let slotmap_fence = Fence::slotmap().read()?;
-        let in_flight_fence = slotmap_fence
+        let slotmap_fence = SlotMappable::slotmap().read().unwrap();
+        let in_flight_fence: &Fence = slotmap_fence
             .get(self.in_flight_fences[self.frame_index])
-            .unwrap();
+            .expect("fence not found");
 
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device.get(self.device).unwrap();
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(self.device).expect("device not found");
 
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let swapchain = slotmap_swapchain.get(self.swapchain).unwrap();
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
+            .get(self.swapchain)
+            .expect("swapchain not found");
 
-        let slotmap_semaphore = Semaphore::slotmap().read()?;
-        let image_available_semaphore = slotmap_semaphore
+        let slotmap_semaphore = SlotMappable::slotmap().read().unwrap();
+        let image_available_semaphore: &Semaphore = slotmap_semaphore
             .get(self.image_available_semaphores[self.frame_index])
-            .unwrap();
-        let render_finished_semaphore = slotmap_semaphore
+            .expect("semaphore not found");
+        let render_finished_semaphore: &Semaphore = slotmap_semaphore
             .get(self.render_finished_semaphores[self.frame_index])
-            .unwrap();
+            .expect("semaphore not found");
 
-        let slotmap_queue = Queue::slotmap().read()?;
-        let queue = slotmap_queue.get(self.device_queues[0]).unwrap();
+        let slotmap_queue = SlotMappable::slotmap().read().unwrap();
+        let queue: &Queue = slotmap_queue
+            .get(self.device_queues[0])
+            .expect("queue not found");
 
         unsafe {
             let fences = [in_flight_fence.handle()];
@@ -322,10 +347,10 @@ impl Renderer {
                 )?
                 .0 as usize
         };
-        let slotmap_command_buffer = CommandBuffer::slotmap().read()?;
-        let command_buffer = slotmap_command_buffer
+        let slotmap_command_buffer = SlotMappable::slotmap().read().unwrap();
+        let command_buffer: &CommandBuffer = slotmap_command_buffer
             .get(self.command_buffers[image_index])
-            .unwrap();
+            .expect("command buffer not found");
 
         if self.images_in_flight[image_index] != vk::Fence::null() {
             let fences = [self.images_in_flight[image_index]];
@@ -358,10 +383,9 @@ impl Renderer {
             .swapchains(&swapchains)
             .image_indices(&image_indices);
         unsafe {
-            let queue_handle = queue.handle();
             swapchain
                 .loader()
-                .queue_present(queue_handle, &present_info)?;
+                .queue_present(queue.handle(), &present_info)?;
         }
         self.frame_index = (self.frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
@@ -369,10 +393,8 @@ impl Renderer {
 
     pub fn wait(&mut self) -> Result<(), Box<dyn Error>> {
         unsafe {
-            let slotmap = Device::slotmap().read()?;
-            let device = slotmap
-                .get(self.device)
-                .ok_or_else(|| utils::make_error("Wait failure: device not found"))?;
+            let slotmap = SlotMappable::slotmap().read().unwrap();
+            let device: &Device = slotmap.get(self.device).expect("device not found");
             device.loader().device_wait_idle()?;
         }
         Ok(())

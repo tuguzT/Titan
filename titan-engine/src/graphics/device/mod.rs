@@ -12,7 +12,11 @@ use proc_macro::SlotMappable;
 pub use queue::Queue;
 
 use super::{
-    ext::Swapchain, instance::Instance, slotmap::SlotMappable, surface, surface::Surface, utils,
+    ext::Swapchain,
+    instance::Instance,
+    slotmap::SlotMappable,
+    surface::{self, Surface},
+    utils,
 };
 
 pub mod physical;
@@ -43,14 +47,12 @@ impl Device {
         surface_key: surface::Key,
         physical_device_key: physical::Key,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_surface = Surface::slotmap().read()?;
-        let surface = slotmap_surface
-            .get(surface_key)
-            .ok_or_else(|| utils::make_error("surface not found"))?;
-        let slotmap_physical_device = PhysicalDevice::slotmap().read()?;
-        let physical_device = slotmap_physical_device
+        let slotmap_surface = SlotMappable::slotmap().read().unwrap();
+        let surface: &Surface = slotmap_surface.get(surface_key).expect("surface not found");
+        let slotmap_physical_device = SlotMappable::slotmap().read().unwrap();
+        let physical_device: &PhysicalDevice = slotmap_physical_device
             .get(physical_device_key)
-            .ok_or_else(|| utils::make_error("physical device not found"))?;
+            .expect("physical device not found");
 
         let surface_instance = surface.parent_instance();
         let physical_device_instance = physical_device.parent_instance();
@@ -59,10 +61,10 @@ impl Device {
                 utils::make_error("surface and physical device parents must be the same").into(),
             );
         }
-        let slotmap_instance = Instance::slotmap().read()?;
-        let instance = slotmap_instance
+        let slotmap_instance = SlotMappable::slotmap().read().unwrap();
+        let instance: &Instance = slotmap_instance
             .get(surface_instance)
-            .ok_or_else(|| utils::make_error("instance not found"))?;
+            .expect("instance not found");
 
         let mut unique_family_indices = HashSet::new();
         unique_family_indices.insert(physical_device.graphics_family_index()?);
@@ -105,7 +107,7 @@ impl Device {
                 .create_device(physical_device.handle(), &create_info, None)?
         };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             queue_create_infos,

@@ -8,7 +8,6 @@ use proc_macro::SlotMappable;
 use super::super::{
     device::{self, Device},
     slotmap::SlotMappable,
-    utils,
 };
 
 slotmap::new_key_type! {
@@ -24,15 +23,13 @@ pub struct Semaphore {
 
 impl Semaphore {
     pub fn new(device_key: device::Key) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         let create_info = vk::SemaphoreCreateInfo::builder();
         let handle = unsafe { device.loader().create_semaphore(&create_info, None)? };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -52,14 +49,10 @@ impl Semaphore {
 
 impl Drop for Semaphore {
     fn drop(&mut self) {
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(self.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(self.parent_device())
+            .expect("device not found");
         unsafe { device.loader().destroy_semaphore(self.handle, None) }
     }
 }

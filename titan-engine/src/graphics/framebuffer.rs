@@ -8,7 +8,6 @@ use proc_macro::SlotMappable;
 use super::{
     device::{self, Device},
     slotmap::SlotMappable,
-    utils,
 };
 
 slotmap::new_key_type! {
@@ -27,13 +26,11 @@ impl Framebuffer {
         device_key: device::Key,
         create_info: &vk::FramebufferCreateInfo,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let handle = device.loader().create_framebuffer(create_info, None)?;
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -53,14 +50,10 @@ impl Framebuffer {
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(self.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(self.parent_device())
+            .expect("device not found");
         unsafe { device.loader().destroy_framebuffer(self.handle, None) }
     }
 }

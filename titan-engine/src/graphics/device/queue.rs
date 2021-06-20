@@ -5,12 +5,9 @@ use ash::vk;
 
 use proc_macro::SlotMappable;
 
-use super::{
-    super::{
-        device::{self, Device},
-        slotmap::SlotMappable,
-    },
-    utils,
+use super::super::{
+    device::{self, Device},
+    slotmap::SlotMappable,
 };
 
 slotmap::new_key_type! {
@@ -31,13 +28,11 @@ impl Queue {
         family_index: u32,
         index: u32,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap = Device::slotmap().read()?;
-        let device = slotmap
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap.get(device_key).expect("device not found");
         let handle = device.loader().get_device_queue(family_index, index);
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             family_index,

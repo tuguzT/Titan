@@ -35,21 +35,21 @@ impl GraphicsPipeline {
         render_pass_key: render_pass::Key,
         pipeline_layout_key: layout::Key,
     ) -> Result<Key, Box<dyn Error>> {
-        let slotmap_pipeline_layout = PipelineLayout::slotmap().read()?;
-        let pipeline_layout = slotmap_pipeline_layout
+        let slotmap_pipeline_layout = SlotMappable::slotmap().read().unwrap();
+        let pipeline_layout: &PipelineLayout = slotmap_pipeline_layout
             .get(pipeline_layout_key)
-            .ok_or_else(|| utils::make_error("pipeline layout not found"))?;
+            .expect("pipeline layout not found");
 
-        let slotmap_render_pass = RenderPass::slotmap().read()?;
-        let render_pass = slotmap_render_pass
+        let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
+        let render_pass: &RenderPass = slotmap_render_pass
             .get(render_pass_key)
-            .ok_or_else(|| utils::make_error("render pass not found"))?;
+            .expect("render pass not found");
 
         let swapchain_key = render_pass.parent_swapchain();
-        let slotmap_swapchain = Swapchain::slotmap().read()?;
-        let render_pass_swapchain = slotmap_swapchain
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let render_pass_swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
-            .ok_or_else(|| utils::make_error("swapchain not found"))?;
+            .expect("swapchain not found");
 
         let render_pass_device = render_pass_swapchain.parent_device();
         let pipeline_layout_device = pipeline_layout.parent_device();
@@ -60,16 +60,18 @@ impl GraphicsPipeline {
             .into());
         }
         let device_key = render_pass_device;
-        let slotmap_device = Device::slotmap().read()?;
-        let device = slotmap_device
-            .get(device_key)
-            .ok_or_else(|| utils::make_error("device not found"))?;
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         let vert_shader_module_key = ShaderModule::new(device_key, VERT_SHADER_CODE)?;
         let frag_shader_module_key = ShaderModule::new(device_key, FRAG_SHADER_CODE)?;
-        let slotmap_shader = ShaderModule::slotmap().write()?;
-        let vert_shader_module: &ShaderModule = slotmap_shader.get(vert_shader_module_key).unwrap();
-        let frag_shader_module: &ShaderModule = slotmap_shader.get(frag_shader_module_key).unwrap();
+        let mut slotmap_shader = SlotMappable::slotmap().write().unwrap();
+        let vert_shader_module: &ShaderModule = slotmap_shader
+            .get(vert_shader_module_key)
+            .expect("shader module not found");
+        let frag_shader_module: &ShaderModule = slotmap_shader
+            .get(frag_shader_module_key)
+            .expect("shader module not found");
 
         let shader_stage_info_name = crate::c_str!("main");
         let vert_shader_stage_info = vk::PipelineShaderStageCreateInfo::builder()
@@ -159,8 +161,10 @@ impl GraphicsPipeline {
                     .ok_or_else(|| utils::make_error("graphics pipeline was not created"))
             })
             .map_err(|_| utils::make_error("graphics pipeline was not created"))??;
+        slotmap_shader.remove(frag_shader_module_key);
+        slotmap_shader.remove(vert_shader_module_key);
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             handle,
@@ -185,32 +189,20 @@ impl GraphicsPipeline {
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
-        let slotmap_render_pass = match RenderPass::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let render_pass = match slotmap_render_pass.get(self.parent_render_pass()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
+        let render_pass: &RenderPass = slotmap_render_pass
+            .get(self.parent_render_pass())
+            .expect("render pass not found");
 
-        let slotmap_swapchain = match Swapchain::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let swapchain = match slotmap_swapchain.get(render_pass.parent_swapchain()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
+        let swapchain: &Swapchain = slotmap_swapchain
+            .get(render_pass.parent_swapchain())
+            .expect("swapchain not found");
 
-        let slotmap_device = match Device::slotmap().read() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let device = match slotmap_device.get(swapchain.parent_device()) {
-            None => return,
-            Some(value) => value,
-        };
+        let slotmap_device = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap_device
+            .get(swapchain.parent_device())
+            .expect("device not found");
         unsafe { device.loader().destroy_pipeline(self.handle, None) }
     }
 }

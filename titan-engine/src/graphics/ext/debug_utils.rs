@@ -9,7 +9,10 @@ use log::Level;
 
 use proc_macro::SlotMappable;
 
-use super::super::{instance, instance::Instance, slotmap::SlotMappable, utils};
+use super::super::{
+    instance::{self, Instance},
+    slotmap::SlotMappable,
+};
 
 slotmap::new_key_type! {
     pub struct Key;
@@ -25,10 +28,8 @@ pub struct DebugUtils {
 
 impl DebugUtils {
     pub fn new(instance_key: instance::Key) -> Result<Key, Box<dyn Error>> {
-        let slotmap = Instance::slotmap().read()?;
-        let instance = slotmap
-            .get(instance_key)
-            .ok_or_else(|| utils::make_error("instance not found"))?;
+        let slotmap = SlotMappable::slotmap().read().unwrap();
+        let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 
         let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
@@ -38,7 +39,7 @@ impl DebugUtils {
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
 
-        let mut slotmap = SlotMappable::slotmap().write()?;
+        let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
             loader,
