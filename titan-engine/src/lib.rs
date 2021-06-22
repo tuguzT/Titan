@@ -63,7 +63,7 @@ where
                     return;
                 }
                 if let Err(error) = renderer.render() {
-                    log::error!("{:?}", error);
+                    log::error!("{}", error);
                     *control_flow = ControlFlow::Exit;
                 }
             }
@@ -81,8 +81,8 @@ fn get_or_panic<T>(value: Result<T>) -> T {
     match value {
         Ok(value) => value,
         Err(error) => {
-            log::error!("initialization error: {:?}", error);
-            panic!("initialization error: {:?}", error);
+            log::error!("initialization error: {}", error);
+            panic!("initialization error: {}", error);
         }
     }
 }

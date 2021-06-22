@@ -1,5 +1,5 @@
 use std::error::Error as StdError;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt;
 
 use ash::vk;
 
@@ -16,10 +16,11 @@ pub enum Error {
     },
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+impl fmt::Display for Error {
+    #[allow(deprecated)]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Graphics { result } => Display::fmt(result, f),
+            Self::Graphics { result } => write!(f, "{:?}: {}", result, result.description()),
             Self::Other { message, .. } => write!(f, "{}", message),
         }
     }

@@ -65,14 +65,8 @@ impl Instance {
             entry_loader.enumerate_instance_extension_properties()?;
 
         // Setup application info for Vulkan API
-        let application_name = CString::new(config.name()).map_err(|error| Error::Other {
-            message: error.to_string(),
-            source: Some(error.into()),
-        })?;
-        let engine_name = CString::new(ENGINE_NAME).map_err(|error| Error::Other {
-            message: error.to_string(),
-            source: Some(error.into()),
-        })?;
+        let application_name = CString::new(config.name()).unwrap();
+        let engine_name = CString::new(ENGINE_NAME).unwrap();
         let application_version = utils::to_vk_version(&config.version());
         let engine_version = utils::to_vk_version(&ENGINE_VERSION);
         let application_info = vk::ApplicationInfo::builder()
