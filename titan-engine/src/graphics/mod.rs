@@ -53,11 +53,19 @@ pub struct Renderer {
     surface: surface::Key,
     debug_utils: Option<debug_utils::Key>,
     instance: instance::Key,
+
+    window: Window,
 }
 
 impl Renderer {
-    pub fn new(config: &Config, window: &Window) -> Result<Self> {
-        let instance = Instance::new(config, window)?;
+    pub fn new(config: &Config, window: Window) -> Result<Self> {
+        let instance = {
+            let key = Instance::new(config, &window)?;
+            let slotmap = SlotMappable::slotmap().write().unwrap();
+            let instance: &Instance = slotmap.get(key).unwrap();
+            log::info!("version of Vulkan instance is {}", instance.version());
+            key
+        };
 
         let debug_utils = if instance::ENABLE_VALIDATION {
             let key = DebugUtils::new(instance)?;
@@ -66,7 +74,7 @@ impl Renderer {
         } else {
             None
         };
-        let surface = Surface::new(instance, window)?;
+        let surface = Surface::new(instance, &window)?;
 
         let physical_device = {
             let physical_devices: Vec<_> = {
@@ -124,7 +132,7 @@ impl Renderer {
             device.enumerate_queues()?
         };
 
-        let swapchain = Swapchain::new(window, device, surface)?;
+        let swapchain = Swapchain::new(&window, device, surface)?;
         let swapchain_images = {
             let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
             let swapchain: &Swapchain = slotmap_swapchain
@@ -283,6 +291,7 @@ impl Renderer {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
+            window,
             instance,
             debug_utils,
             surface,
@@ -304,6 +313,10 @@ impl Renderer {
             images_in_flight: vec![vk::Fence::null(); MAX_FRAMES_IN_FLIGHT],
             frame_index: 0,
         })
+    }
+
+    pub fn window(&self) -> &Window {
+        &self.window
     }
 
     pub fn render(&mut self) -> Result<()> {

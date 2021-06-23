@@ -36,11 +36,12 @@ where
                 source: Some(error.into()),
             }),
     );
-    let renderer = get_or_panic(Renderer::new(&config, &window));
+    let renderer = get_or_panic(Renderer::new(&config, window));
     let mut renderer = ManuallyDrop::new(renderer);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
+        let window = renderer.window();
         match event {
             Event::NewEvents(cause) => match cause {
                 StartCause::Init => {
