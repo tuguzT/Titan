@@ -1,8 +1,4 @@
-use std::str::FromStr;
-
-pub use version::Version;
-
-mod version;
+use semver::Version;
 
 #[derive(Debug)]
 pub struct Config {
@@ -14,7 +10,7 @@ pub const ENGINE_NAME: &'static str = env!("CARGO_CRATE_NAME", "library must be 
 pub const ENGINE_VERSION_STR: &'static str =
     env!("CARGO_PKG_VERSION", "library must be compiled by Cargo");
 lazy_static::lazy_static! {
-    pub static ref ENGINE_VERSION: Version = Version::from_str(ENGINE_VERSION_STR).unwrap();
+    pub static ref ENGINE_VERSION: Version = ENGINE_VERSION_STR.parse().unwrap();
 }
 
 impl Config {

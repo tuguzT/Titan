@@ -3,6 +3,7 @@ use std::os::raw::c_char;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
+use semver::Version;
 use winit::window::Window;
 
 use proc_macro::SlotMappable;
@@ -10,7 +11,7 @@ use proc_macro::SlotMappable;
 use crate::error::{Error, Result};
 use crate::{
     config::ENGINE_VERSION,
-    config::{Config, Version, ENGINE_NAME},
+    config::{Config, ENGINE_NAME},
 };
 
 use super::{
