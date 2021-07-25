@@ -2,8 +2,7 @@ use jni::errors::Error;
 use jni::objects::JObject;
 use jni::JNIEnv;
 
-use crate::config::Config;
-use crate::config::Version;
+use crate::config::{Config, Version};
 
 pub fn get_config(env: JNIEnv, config: JObject) -> Result<Config, Error> {
     let name_obj = env.get_field(config, "name", "Ljava/lang/String;")?.l()?;

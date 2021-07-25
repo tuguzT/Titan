@@ -1,4 +1,3 @@
-use crate::error::{Error, Result};
 use std::mem::ManuallyDrop;
 
 use winit::dpi::LogicalSize;
@@ -7,6 +6,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use config::Config;
+use error::{Error, Result};
 use graphics::Renderer;
 
 pub mod config;
@@ -82,8 +82,9 @@ fn get_or_panic<T>(value: Result<T>) -> T {
     match value {
         Ok(value) => value,
         Err(error) => {
-            log::error!("initialization error: {}", error);
-            panic!("initialization error: {}", error);
+            let format = format!("initialization error: {}", error);
+            log::error!("{}", format);
+            panic!("{}", format);
         }
     }
 }

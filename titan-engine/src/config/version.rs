@@ -38,7 +38,7 @@ impl FromStr for Version {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         if !SEMVER_REGEX.is_match(s) {
-            return Err("Given string is not a semver".into());
+            return Err("given string is not a semver".into());
         }
         let mut end: usize = 0;
         let mut numbers = INT_REGEX.find_iter(s).filter_map(|int| {
