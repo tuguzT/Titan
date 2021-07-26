@@ -1,7 +1,6 @@
 #![windows_subsystem = "windows"]
 
 use std::error::Error;
-use std::str::FromStr;
 
 use pretty_env_logger as logger;
 

@@ -12,8 +12,10 @@ use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
 use sync::{fence, semaphore, Fence, Semaphore};
 
-use crate::config::Config;
-use crate::error::{Error, Result};
+use crate::{
+    config::Config,
+    error::{Error, Result},
+};
 
 use self::slotmap::SlotMappable;
 

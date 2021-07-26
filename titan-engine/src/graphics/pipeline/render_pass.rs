@@ -5,7 +5,12 @@ use proc_macro::SlotMappable;
 
 use crate::error::Result;
 
-use super::super::{ext::Swapchain, swapchain, CommandBuffer, Device, SlotMappable};
+use super::super::{
+    command::CommandBuffer,
+    device::Device,
+    ext::swapchain::{self, Swapchain},
+    slotmap::SlotMappable,
+};
 
 slotmap::new_key_type! {
     pub struct Key;

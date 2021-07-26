@@ -8,10 +8,9 @@ use winit::window::Window;
 
 use proc_macro::SlotMappable;
 
-use crate::error::{Error, Result};
 use crate::{
-    config::ENGINE_VERSION,
-    config::{Config, ENGINE_NAME},
+    config::{Config, ENGINE_NAME, ENGINE_VERSION},
+    error::{Error, Result},
 };
 
 use super::{
