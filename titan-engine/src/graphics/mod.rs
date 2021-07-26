@@ -263,14 +263,16 @@ impl Renderer {
                     .clear_values(&clear_values);
                 render_pass_ref.begin(command_buffer, &begin_info, vk::SubpassContents::INLINE)?;
 
+                let command_buffer_handle = command_buffer.handle();
                 device_ref.loader().cmd_bind_pipeline(
-                    command_buffer.handle(),
+                    *command_buffer_handle,
                     vk::PipelineBindPoint::GRAPHICS,
                     graphics_pipeline_ref.handle(),
                 );
                 device_ref
                     .loader()
-                    .cmd_draw(command_buffer.handle(), 3, 1, 0, 0);
+                    .cmd_draw(*command_buffer_handle, 3, 1, 0, 0);
+                drop(command_buffer_handle);
 
                 render_pass_ref.end(command_buffer)?;
                 command_buffer.end()?;
@@ -381,10 +383,11 @@ impl Renderer {
         let wait_semaphores = [image_available_semaphore.handle()];
         let signal_semaphores = [render_finished_semaphore.handle()];
         let command_buffers = [command_buffer.handle()];
+        let command_buffers: Vec<_> = command_buffers.iter().map(|cb| **cb).collect();
         let submit_info = vk::SubmitInfo::builder()
             .wait_semaphores(&wait_semaphores)
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .command_buffers(&command_buffers)
+            .command_buffers(command_buffers.as_slice())
             .signal_semaphores(&signal_semaphores);
         let submits = [*submit_info];
         unsafe {

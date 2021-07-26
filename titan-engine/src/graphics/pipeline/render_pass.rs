@@ -104,7 +104,7 @@ impl RenderPass {
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();
 
-        Ok(loader.cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
+        Ok(loader.cmd_begin_render_pass(*command_buffer.handle(), &begin_info, contents))
     }
 
     pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<()> {
@@ -119,7 +119,7 @@ impl RenderPass {
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();
 
-        Ok(loader.cmd_end_render_pass(command_buffer.handle()))
+        Ok(loader.cmd_end_render_pass(*command_buffer.handle()))
     }
 }
 

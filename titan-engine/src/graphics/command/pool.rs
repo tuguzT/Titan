@@ -1,3 +1,5 @@
+use std::sync::{Mutex, MutexGuard};
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -18,7 +20,7 @@ slotmap::new_key_type! {
 #[derive(SlotMappable)]
 pub struct CommandPool {
     key: Key,
-    handle: vk::CommandPool,
+    handle: Mutex<vk::CommandPool>,
     parent_device: device::Key,
 }
 
@@ -34,14 +36,14 @@ impl CommandPool {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
-            handle,
+            handle: Mutex::new(handle),
             parent_device: device_key,
         });
         Ok(key)
     }
 
-    pub fn handle(&self) -> vk::CommandPool {
-        self.handle
+    pub fn handle(&self) -> MutexGuard<vk::CommandPool> {
+        self.handle.lock().unwrap()
     }
 
     pub fn parent_device(&self) -> device::Key {
@@ -54,7 +56,7 @@ impl CommandPool {
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
         let allocate_info = vk::CommandBufferAllocateInfo::builder()
-            .command_pool(self.handle())
+            .command_pool(*self.handle())
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(count);
         let loader = device.loader();
@@ -69,25 +71,31 @@ impl CommandPool {
 
     pub unsafe fn free_command_buffers(&self, command_buffers: &[command::buffer::Key]) {
         let device_key = self.parent_device();
-        let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let device: &Device = slotmap_device.get(device_key).expect("device not found");
+        let slotmap = SlotMappable::slotmap().read().unwrap();
+        let device: &Device = slotmap.get(device_key).expect("device not found");
 
-        let mut slotmap_command_buffer = SlotMappable::slotmap().write().unwrap();
-        let command_buffers: Vec<_> = command_buffers
-            .iter()
-            .map(|key| {
-                let command_buffer: &CommandBuffer = slotmap_command_buffer
-                    .get(*key)
-                    .expect("command buffer not found");
-                let handle = command_buffer.handle();
-                slotmap_command_buffer.remove(*key);
-                handle
-            })
-            .collect();
+        {
+            let slotmap = SlotMappable::slotmap().read().unwrap();
+            let command_buffer_refs: Vec<_> = command_buffers
+                .iter()
+                .map(|key| {
+                    let command_buffer: &CommandBuffer =
+                        slotmap.get(*key).expect("command buffer not found");
+                    command_buffer.handle()
+                })
+                .collect();
+            let command_buffer_handles: Vec<_> =
+                command_buffer_refs.iter().map(|cb| **cb).collect();
 
-        device
-            .loader()
-            .free_command_buffers(self.handle(), command_buffers.as_slice());
+            device
+                .loader()
+                .free_command_buffers(*self.handle(), command_buffer_handles.as_slice());
+        }
+
+        let mut slotmap = <CommandBuffer as SlotMappable>::slotmap().write().unwrap();
+        command_buffers.iter().for_each(|key| {
+            slotmap.remove(*key);
+        });
     }
 }
 
@@ -98,6 +106,6 @@ impl Drop for CommandPool {
             .get(self.parent_device())
             .expect("device not found");
         let loader = device.loader();
-        unsafe { loader.destroy_command_pool(self.handle, None) }
+        unsafe { loader.destroy_command_pool(*self.handle(), None) }
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::{Mutex, MutexGuard};
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -18,7 +20,7 @@ slotmap::new_key_type! {
 #[derive(SlotMappable)]
 pub struct CommandBuffer {
     key: Key,
-    handle: vk::CommandBuffer,
+    handle: Mutex<vk::CommandBuffer>,
     parent_command_pool: command::pool::Key,
 }
 
@@ -30,7 +32,7 @@ impl CommandBuffer {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
-            handle,
+            handle: Mutex::new(handle),
             parent_command_pool: command_pool_key,
         });
         Ok(key)
@@ -40,8 +42,8 @@ impl CommandBuffer {
         self.parent_command_pool
     }
 
-    pub fn handle(&self) -> vk::CommandBuffer {
-        self.handle
+    pub fn handle(&self) -> MutexGuard<vk::CommandBuffer> {
+        self.handle.lock().unwrap()
     }
 
     pub unsafe fn begin(&self, begin_info: &vk::CommandBufferBeginInfo) -> Result<()> {
@@ -56,7 +58,7 @@ impl CommandBuffer {
             .expect("command pool parent was lost");
 
         let loader = device.loader();
-        Ok(loader.begin_command_buffer(self.handle, begin_info)?)
+        Ok(loader.begin_command_buffer(*self.handle(), begin_info)?)
     }
 
     pub unsafe fn end(&self) -> Result<()> {
@@ -71,6 +73,6 @@ impl CommandBuffer {
             .expect("command pool parent was lost");
 
         let loader = device.loader();
-        Ok(loader.end_command_buffer(self.handle)?)
+        Ok(loader.end_command_buffer(*self.handle())?)
     }
 }
