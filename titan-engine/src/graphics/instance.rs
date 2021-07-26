@@ -34,7 +34,6 @@ slotmap::new_key_type! {
 pub struct Loader {
     entry: ash::Entry,
     instance: ash::Instance,
-    handle: vk::Instance,
 }
 
 impl Loader {
@@ -161,7 +160,6 @@ impl Instance {
             extension_properties,
             loader: Mutex::new(Loader {
                 entry: entry_loader,
-                handle: instance_loader.handle(),
                 instance: instance_loader,
             }),
         });
