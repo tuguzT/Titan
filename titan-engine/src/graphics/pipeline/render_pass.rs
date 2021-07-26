@@ -102,10 +102,9 @@ impl RenderPass {
         let device_key = swapchain.parent_device();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
+        let loader = device.loader();
 
-        Ok(device
-            .loader()
-            .cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
+        Ok(loader.cmd_begin_render_pass(command_buffer.handle(), &begin_info, contents))
     }
 
     pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<()> {
@@ -118,8 +117,9 @@ impl RenderPass {
         let device_key = swapchain.parent_device();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
+        let loader = device.loader();
 
-        Ok(device.loader().cmd_end_render_pass(command_buffer.handle()))
+        Ok(loader.cmd_end_render_pass(command_buffer.handle()))
     }
 }
 
@@ -134,7 +134,8 @@ impl Drop for RenderPass {
         let device_key = swapchain.parent_device();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
+        let loader = device.loader();
 
-        unsafe { device.loader().destroy_render_pass(self.handle, None) }
+        unsafe { loader.destroy_render_pass(self.handle, None) }
     }
 }

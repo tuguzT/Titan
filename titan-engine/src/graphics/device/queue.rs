@@ -1,3 +1,5 @@
+use std::sync::{Mutex, MutexGuard};
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -18,7 +20,7 @@ slotmap::new_key_type! {
 pub struct Queue {
     key: Key,
     family_index: u32,
-    handle: vk::Queue,
+    handle: Mutex<vk::Queue>,
     parent_device: device::Key,
 }
 
@@ -36,14 +38,14 @@ impl Queue {
         let key = slotmap.insert_with_key(|key| Self {
             key,
             family_index,
-            handle,
+            handle: Mutex::new(handle),
             parent_device: device_key,
         });
         Ok(key)
     }
 
-    pub fn handle(&self) -> vk::Queue {
-        self.handle
+    pub fn handle(&self) -> MutexGuard<vk::Queue> {
+        self.handle.lock().unwrap()
     }
 
     pub fn parent_device(&self) -> device::Key {

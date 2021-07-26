@@ -57,9 +57,9 @@ impl CommandPool {
             .command_pool(self.handle())
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(count);
+        let loader = device.loader();
         unsafe {
-            device
-                .loader()
+            loader
                 .allocate_command_buffers(&allocate_info)?
                 .into_iter()
                 .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
@@ -97,6 +97,7 @@ impl Drop for CommandPool {
         let device: &Device = slotmap_device
             .get(self.parent_device())
             .expect("device not found");
-        unsafe { device.loader().destroy_command_pool(self.handle, None) }
+        let loader = device.loader();
+        unsafe { loader.destroy_command_pool(self.handle, None) }
     }
 }

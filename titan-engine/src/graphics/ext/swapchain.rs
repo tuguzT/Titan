@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::ffi::CStr;
+use std::ops::Deref;
 
 use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk;
@@ -99,7 +100,7 @@ impl Swapchain {
         }
 
         let loader = instance.loader();
-        let loader = SwapchainLoader::new(loader.instance(), device.loader());
+        let loader = SwapchainLoader::new(loader.instance(), device.loader().deref());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();

@@ -59,6 +59,7 @@ impl Drop for PipelineLayout {
         let device: &Device = slotmap_device
             .get(self.parent_device())
             .expect("device not found");
-        unsafe { device.loader().destroy_pipeline_layout(self.handle, None) }
+        let loader = device.loader();
+        unsafe { loader.destroy_pipeline_layout(self.handle, None) }
     }
 }

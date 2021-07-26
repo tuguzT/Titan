@@ -347,6 +347,7 @@ impl Renderer {
         let queue: &Queue = slotmap_queue
             .get(self.device_queues[0])
             .expect("queue not found");
+        let queue_handle = queue.handle();
 
         unsafe {
             let fences = [in_flight_fence.handle()];
@@ -391,7 +392,7 @@ impl Renderer {
             device.loader().reset_fences(&fences)?;
             device
                 .loader()
-                .queue_submit(queue.handle(), &submits, in_flight_fence.handle())?;
+                .queue_submit(*queue_handle, &submits, in_flight_fence.handle())?;
         }
         let swapchains = [swapchain.handle()];
         let image_indices = [image_index as u32];
@@ -402,7 +403,7 @@ impl Renderer {
         unsafe {
             swapchain
                 .loader()
-                .queue_present(queue.handle(), &present_info)?;
+                .queue_present(*queue_handle, &present_info)?;
         }
         self.frame_index = (self.frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())

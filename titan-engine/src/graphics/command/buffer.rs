@@ -55,9 +55,8 @@ impl CommandBuffer {
             .get(command_pool.parent_device())
             .expect("command pool parent was lost");
 
-        Ok(device
-            .loader()
-            .begin_command_buffer(self.handle, begin_info)?)
+        let loader = device.loader();
+        Ok(loader.begin_command_buffer(self.handle, begin_info)?)
     }
 
     pub unsafe fn end(&self) -> Result<()> {
@@ -71,6 +70,7 @@ impl CommandBuffer {
             .get(command_pool.parent_device())
             .expect("command pool parent was lost");
 
-        Ok(device.loader().end_command_buffer(self.handle)?)
+        let loader = device.loader();
+        Ok(loader.end_command_buffer(self.handle)?)
     }
 }

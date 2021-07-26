@@ -54,6 +54,7 @@ impl Drop for Framebuffer {
         let device: &Device = slotmap_device
             .get(self.parent_device())
             .expect("device not found");
-        unsafe { device.loader().destroy_framebuffer(self.handle, None) }
+        let loader = device.loader();
+        unsafe { loader.destroy_framebuffer(self.handle, None) }
     }
 }

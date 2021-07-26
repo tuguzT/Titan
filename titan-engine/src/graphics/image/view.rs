@@ -62,7 +62,8 @@ impl Drop for ImageView {
         let device: &Device = slotmap_device
             .get(image.parent_device())
             .expect("device not found");
+        let loader = device.loader();
 
-        unsafe { device.loader().destroy_image_view(self.handle, None) }
+        unsafe { loader.destroy_image_view(self.handle, None) }
     }
 }

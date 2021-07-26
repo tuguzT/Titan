@@ -199,6 +199,7 @@ impl Drop for GraphicsPipeline {
         let device: &Device = slotmap_device
             .get(swapchain.parent_device())
             .expect("device not found");
-        unsafe { device.loader().destroy_pipeline(self.handle, None) }
+        let loader = device.loader();
+        unsafe { loader.destroy_pipeline(self.handle, None) }
     }
 }

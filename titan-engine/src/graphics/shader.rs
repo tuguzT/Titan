@@ -68,6 +68,7 @@ impl Drop for ShaderModule {
         let device: &Device = slotmap_device
             .get(self.parent_device())
             .expect("device not found");
-        unsafe { device.loader().destroy_shader_module(self.handle, None) }
+        let loader = device.loader();
+        unsafe { loader.destroy_shader_module(self.handle, None) }
     }
 }

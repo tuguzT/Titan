@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::sync::{Mutex, MutexGuard};
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
@@ -32,7 +33,7 @@ lazy_static::lazy_static! {
 #[derive(SlotMappable)]
 pub struct Device {
     key: Key,
-    loader: ash::Device,
+    loader: Mutex<ash::Device>,
     queue_create_infos: Vec<vk::DeviceQueueCreateInfo>,
     parent_physical_device: physical::Key,
 }
@@ -110,18 +111,14 @@ impl Device {
         let key = slotmap.insert_with_key(|key| Self {
             key,
             queue_create_infos,
-            loader,
+            loader: Mutex::new(loader),
             parent_physical_device: physical_device_key,
         });
         Ok(key)
     }
 
-    pub fn loader(&self) -> &ash::Device {
-        &self.loader
-    }
-
-    pub fn handle(&self) -> vk::Device {
-        self.loader.handle()
+    pub fn loader(&self) -> MutexGuard<ash::Device> {
+        self.loader.lock().unwrap()
     }
 
     pub fn parent_physical_device(&self) -> physical::Key {
@@ -142,6 +139,6 @@ impl Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
-        unsafe { self.loader.destroy_device(None) };
+        unsafe { self.loader().destroy_device(None) };
     }
 }
