@@ -149,19 +149,19 @@ impl Swapchain {
             .collect()
     }
 
-    fn pick_format(formats: &Vec<vk::SurfaceFormatKHR>) -> Option<&vk::SurfaceFormatKHR> {
+    fn pick_format(formats: &[vk::SurfaceFormatKHR]) -> Option<&vk::SurfaceFormatKHR> {
         let found_format = formats.iter().find(|format| {
             format.format == vk::Format::B8G8R8A8_SRGB
                 || format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
         });
-        if let None = found_format {
+        if found_format.is_none() {
             formats.first()
         } else {
             found_format
         }
     }
 
-    fn pick_present_mode(present_modes: &Vec<vk::PresentModeKHR>) -> &vk::PresentModeKHR {
+    fn pick_present_mode(present_modes: &[vk::PresentModeKHR]) -> &vk::PresentModeKHR {
         let found_mode = present_modes
             .iter()
             .find(|&&mode| mode == vk::PresentModeKHR::MAILBOX);

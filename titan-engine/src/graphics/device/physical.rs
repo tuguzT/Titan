@@ -92,11 +92,9 @@ impl PhysicalDevice {
                 .map(|extension_property| unsafe {
                     CStr::from_ptr(extension_property.extension_name.as_ptr())
                 });
-        let has_required_extensions = super::REQUIRED_EXTENSIONS.iter().any(|required_name| {
-            extension_properties_names
-                .find(|item| item == required_name)
-                .is_some()
-        });
+        let has_required_extensions = super::REQUIRED_EXTENSIONS
+            .iter()
+            .any(|&required_name| extension_properties_names.any(|item| item == required_name));
         graphics_queue_family_properties.peek().is_some() && has_required_extensions
     }
 
@@ -120,7 +118,7 @@ impl PhysicalDevice {
     ) -> impl Iterator<Item = (usize, &vk::QueueFamilyProperties)> {
         self.queue_family_properties.iter().enumerate().filter(
             move |(_index, queue_family_properties)| {
-                let ref inner_flags = queue_family_properties.queue_flags;
+                let inner_flags = &queue_family_properties.queue_flags;
                 inner_flags.contains(flags)
             },
         )

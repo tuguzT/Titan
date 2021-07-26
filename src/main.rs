@@ -8,9 +8,8 @@ use titan_engine::config::Config;
 use titan_engine::run;
 use titan_engine::window::Event;
 
-const APP_NAME: &'static str = env!("CARGO_CRATE_NAME", "library must be compiled by Cargo");
-const APP_VERSION_STR: &'static str =
-    env!("CARGO_PKG_VERSION", "library must be compiled by Cargo");
+const APP_NAME: &str = env!("CARGO_CRATE_NAME", "library must be compiled by Cargo");
+const APP_VERSION_STR: &str = env!("CARGO_PKG_VERSION", "library must be compiled by Cargo");
 
 fn main() -> Result<(), Box<dyn Error>> {
     logger::try_init()?;

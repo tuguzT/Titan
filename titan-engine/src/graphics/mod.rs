@@ -98,7 +98,7 @@ impl Renderer {
                             && surface.is_suitable(physical_device).unwrap_or(false)
                             && iter.peekable().peek().is_some()
                     })
-                    .map(|key| *key)
+                    .copied()
                     .collect::<Vec<_>>();
                 for key in physical_devices.iter() {
                     if !retain.contains(&key) {
