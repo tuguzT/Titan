@@ -95,20 +95,26 @@ impl Surface {
     pub fn physical_device_queue_family_properties_support<'a>(
         &'a self,
         physical_device: &'a PhysicalDevice,
-    ) -> impl Iterator<Item = (usize, &'a vk::QueueFamilyProperties)> {
+    ) -> Result<Vec<(usize, &'a vk::QueueFamilyProperties)>> {
         physical_device
             .queue_family_properties()
             .iter()
             .enumerate()
-            .filter(move |(index, _queue_family_properties)| unsafe {
-                self.loader
-                    .get_physical_device_surface_support(
+            .filter_map(|tuple| {
+                let result = unsafe {
+                    self.loader.get_physical_device_surface_support(
                         *physical_device.handle(),
-                        *index as u32,
+                        tuple.0 as u32,
                         self.handle,
                     )
-                    .unwrap_or(false)
+                };
+                match result {
+                    Ok(true) => Some(Ok(tuple)),
+                    Err(err) => Some(Err(err.into())),
+                    _ => None,
+                }
             })
+            .collect()
     }
 
     pub fn is_suitable(&self, physical_device: &PhysicalDevice) -> Result<bool> {

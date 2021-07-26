@@ -89,17 +89,28 @@ impl Renderer {
                 let mut slotmap = SlotMappable::slotmap().write().unwrap();
                 let retain = physical_devices
                     .iter()
-                    .filter(|&key| {
+                    .filter_map(|&key| {
                         let physical_device: &PhysicalDevice =
-                            slotmap.get(*key).expect("physical device not found");
-                        let iter = surface
+                            slotmap.get(key).expect("physical device not found");
+                        if !physical_device.is_suitable() {
+                            return None;
+                        }
+
+                        match surface.is_suitable(physical_device) {
+                            Ok(false) => return None,
+                            Err(err) => return Some(Err(err)),
+                            _ => (),
+                        };
+
+                        let family_properties_support = surface
                             .physical_device_queue_family_properties_support(physical_device);
-                        physical_device.is_suitable()
-                            && surface.is_suitable(physical_device).unwrap_or(false)
-                            && iter.peekable().peek().is_some()
+                        match family_properties_support {
+                            Ok(vec) if vec.first().is_some() => Some(Ok(key)),
+                            Err(err) => Some(Err(err)),
+                            _ => None,
+                        }
                     })
-                    .copied()
-                    .collect::<Vec<_>>();
+                    .collect::<Result<Vec<_>>>()?;
                 for key in physical_devices.iter() {
                     if !retain.contains(&key) {
                         slotmap.remove(*key);

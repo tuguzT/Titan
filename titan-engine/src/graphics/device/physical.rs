@@ -148,8 +148,9 @@ impl PhysicalDevice {
 
     pub fn present_family_index(&self, surface: &Surface) -> Result<u32> {
         let present_queue_family_properties =
-            surface.physical_device_queue_family_properties_support(&self);
+            surface.physical_device_queue_family_properties_support(&self)?;
         let present_family_index = present_queue_family_properties
+            .into_iter()
             .peekable()
             .peek()
             .ok_or_else(|| Error::Other {

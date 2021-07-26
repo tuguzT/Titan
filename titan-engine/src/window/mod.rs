@@ -21,8 +21,8 @@ impl From<(u32, u32)> for Size {
     }
 }
 
-impl Into<(u32, u32)> for Size {
-    fn into(self) -> (u32, u32) {
-        (self.width, self.height)
+impl From<Size> for (u32, u32) {
+    fn from(size: Size) -> Self {
+        (size.width, size.height)
     }
 }
