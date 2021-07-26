@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::ffi::CStr;
 
-use ash::extensions::khr::Swapchain as AshSwapchain;
+use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk;
 use winit::window::Window;
 
@@ -27,7 +27,7 @@ pub struct Swapchain {
     handle: vk::SwapchainKHR,
     format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
-    loader: AshSwapchain,
+    loader: SwapchainLoader,
     parent_device: device::Key,
     parent_surface: surface::Key,
 }
@@ -98,7 +98,8 @@ impl Swapchain {
             create_info = create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
         }
 
-        let loader = AshSwapchain::new(instance.loader(), device.loader());
+        let loader = instance.loader();
+        let loader = SwapchainLoader::new(loader.instance(), device.loader());
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
@@ -114,7 +115,7 @@ impl Swapchain {
         Ok(key)
     }
 
-    pub fn loader(&self) -> &AshSwapchain {
+    pub fn loader(&self) -> &SwapchainLoader {
         &self.loader
     }
 
@@ -185,7 +186,7 @@ impl Swapchain {
     }
 
     pub fn name() -> &'static CStr {
-        AshSwapchain::name()
+        SwapchainLoader::name()
     }
 }
 

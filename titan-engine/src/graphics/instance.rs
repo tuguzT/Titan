@@ -1,5 +1,6 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::sync::{Mutex, MutexGuard};
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
@@ -30,14 +31,29 @@ slotmap::new_key_type! {
     pub struct Key;
 }
 
+pub struct Loader {
+    entry: ash::Entry,
+    instance: ash::Instance,
+    handle: vk::Instance,
+}
+
+impl Loader {
+    pub fn entry(&self) -> &ash::Entry {
+        &self.entry
+    }
+
+    pub fn instance(&self) -> &ash::Instance {
+        &self.instance
+    }
+}
+
 #[derive(SlotMappable)]
 pub struct Instance {
     key: Key,
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
-    instance_loader: ash::Instance,
-    entry_loader: ash::Entry,
+    loader: Mutex<Loader>,
 }
 
 impl Instance {
@@ -140,11 +156,14 @@ impl Instance {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
-            entry_loader,
-            instance_loader,
             version,
             layer_properties,
             extension_properties,
+            loader: Mutex::new(Loader {
+                entry: entry_loader,
+                handle: instance_loader.handle(),
+                instance: instance_loader,
+            }),
         });
         Ok(key)
     }
@@ -153,29 +172,25 @@ impl Instance {
         &self.version
     }
 
-    pub fn entry_loader(&self) -> &ash::Entry {
-        &self.entry_loader
-    }
-
-    pub fn loader(&self) -> &ash::Instance {
-        &self.instance_loader
-    }
-
-    pub fn handle(&self) -> vk::Instance {
-        self.loader().handle()
+    pub fn loader(&self) -> MutexGuard<Loader> {
+        self.loader.lock().unwrap()
     }
 
     pub fn enumerate_physical_devices(&self) -> Result<Vec<device::physical::Key>> {
-        let handles = unsafe { self.instance_loader.enumerate_physical_devices()? };
+        let handles = unsafe {
+            let loader = self.loader();
+            loader.instance().enumerate_physical_devices()?
+        };
         handles
             .into_iter()
-            .map(|handle| unsafe { PhysicalDevice::new(self.key, handle) })
+            .map(|handle| unsafe { PhysicalDevice::new(self.key(), handle) })
             .collect()
     }
 }
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        unsafe { self.instance_loader.destroy_instance(None) }
+        let loader = self.loader();
+        unsafe { loader.instance().destroy_instance(None) }
     }
 }

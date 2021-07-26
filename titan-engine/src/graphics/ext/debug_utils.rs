@@ -36,7 +36,8 @@ impl DebugUtils {
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
             .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
             .pfn_user_callback(Some(self::callback));
-        let loader = DebugUtilsLoader::new(instance.entry_loader(), instance.loader());
+        let loader = instance.loader();
+        let loader = DebugUtilsLoader::new(loader.entry(), loader.instance());
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
 

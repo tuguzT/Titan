@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::ffi::CStr;
+use std::sync::{Mutex, MutexGuard};
 
 use ash::prelude::VkResult;
 use ash::version::InstanceV1_0;
@@ -28,7 +29,7 @@ pub struct PhysicalDevice {
     queue_family_properties: Vec<vk::QueueFamilyProperties>,
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
-    handle: vk::PhysicalDevice,
+    handle: Mutex<vk::PhysicalDevice>,
     parent_instance: instance::Key,
 }
 
@@ -39,23 +40,29 @@ impl PhysicalDevice {
             .get(instance_key)
             .expect("instance not found");
 
-        let properties = instance.loader().get_physical_device_properties(handle);
-        let features = instance.loader().get_physical_device_features(handle);
-        let memory_properties = instance
-            .loader()
+        let instance_loader = instance.loader();
+        let properties = instance_loader
+            .instance()
+            .get_physical_device_properties(handle);
+        let features = instance_loader
+            .instance()
+            .get_physical_device_features(handle);
+        let memory_properties = instance_loader
+            .instance()
             .get_physical_device_memory_properties(handle);
-        let queue_family_properties = instance
-            .loader()
+        let queue_family_properties = instance_loader
+            .instance()
             .get_physical_device_queue_family_properties(handle);
-        let layer_properties = enumerate_device_layer_properties(instance.loader(), handle)?;
-        let extension_properties = instance
-            .loader()
+        let layer_properties =
+            enumerate_device_layer_properties(instance_loader.instance(), handle)?;
+        let extension_properties = instance_loader
+            .instance()
             .enumerate_device_extension_properties(handle)?;
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
-            handle,
+            handle: Mutex::new(handle),
             properties,
             features,
             queue_family_properties,
@@ -67,8 +74,8 @@ impl PhysicalDevice {
         Ok(key)
     }
 
-    pub fn handle(&self) -> ash::vk::PhysicalDevice {
-        self.handle
+    pub fn handle(&self) -> MutexGuard<vk::PhysicalDevice> {
+        self.handle.lock().unwrap()
     }
 
     pub fn parent_instance(&self) -> instance::Key {

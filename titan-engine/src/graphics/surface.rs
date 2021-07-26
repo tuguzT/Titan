@@ -30,9 +30,15 @@ impl Surface {
         let slotmap = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 
-        let loader = SurfaceLoader::new(instance.entry_loader(), instance.loader());
+        let instance_loader = instance.loader();
+        let loader = SurfaceLoader::new(instance_loader.entry(), instance_loader.instance());
         let handle = unsafe {
-            ash_window::create_surface(instance.entry_loader(), instance.loader(), window, None)?
+            ash_window::create_surface(
+                instance_loader.entry(),
+                instance_loader.instance(),
+                window,
+                None,
+            )?
         };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
@@ -59,7 +65,7 @@ impl Surface {
     ) -> Result<vk::SurfaceCapabilitiesKHR> {
         let capabilities = unsafe {
             self.loader
-                .get_physical_device_surface_capabilities(physical_device.handle(), self.handle)?
+                .get_physical_device_surface_capabilities(*physical_device.handle(), self.handle)?
         };
         Ok(capabilities)
     }
@@ -70,7 +76,7 @@ impl Surface {
     ) -> Result<Vec<vk::SurfaceFormatKHR>> {
         let formats = unsafe {
             self.loader
-                .get_physical_device_surface_formats(physical_device.handle(), self.handle)?
+                .get_physical_device_surface_formats(*physical_device.handle(), self.handle)?
         };
         Ok(formats)
     }
@@ -81,7 +87,7 @@ impl Surface {
     ) -> Result<Vec<vk::PresentModeKHR>> {
         let present_modes = unsafe {
             self.loader
-                .get_physical_device_surface_present_modes(physical_device.handle(), self.handle)?
+                .get_physical_device_surface_present_modes(*physical_device.handle(), self.handle)?
         };
         Ok(present_modes)
     }
@@ -97,7 +103,7 @@ impl Surface {
             .filter(move |(index, _queue_family_properties)| unsafe {
                 self.loader
                     .get_physical_device_surface_support(
-                        physical_device.handle(),
+                        *physical_device.handle(),
                         *index as u32,
                         self.handle,
                     )

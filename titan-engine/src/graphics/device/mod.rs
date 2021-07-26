@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::ffi::CStr;
-use std::ops::Deref;
 use std::os::raw::c_char;
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
@@ -96,13 +95,15 @@ impl Device {
         let features = vk::PhysicalDeviceFeatures::builder();
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(queue_create_infos.as_slice())
-            .enabled_layer_names(p_layer_properties_names.deref())
-            .enabled_extension_names(p_extension_properties_names.deref())
+            .enabled_layer_names(&*p_layer_properties_names)
+            .enabled_extension_names(&*p_extension_properties_names)
             .enabled_features(&features);
         let loader = unsafe {
-            instance
-                .loader()
-                .create_device(physical_device.handle(), &create_info, None)?
+            instance.loader().instance().create_device(
+                *physical_device.handle(),
+                &create_info,
+                None,
+            )?
         };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
