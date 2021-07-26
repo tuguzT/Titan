@@ -20,14 +20,11 @@ fn impl_slot_mappable_macro_derive(ast: &syn::DeriveInput) -> TokenStream {
             where
                 Self: Sized + Send + Sync,
             {
-                static ONCE: ::std::sync::Once = ::std::sync::Once::new();
-                static mut SLOTMAP: Option<::std::sync::RwLock<::slotmap::SlotMap<Key, #name>>> = None;
-                unsafe {
-                    ONCE.call_once(|| {
-                        SLOTMAP = Some(::std::sync::RwLock::new(::slotmap::SlotMap::with_key()));
-                    });
-                    SLOTMAP.as_ref().unwrap()
+                ::lazy_static::lazy_static! {
+                    static ref SLOTMAP: ::std::sync::RwLock<::slotmap::SlotMap<Key, #name>> =
+                        ::std::sync::RwLock::new(::slotmap::SlotMap::with_key());
                 }
+                &*SLOTMAP
             }
         }
     };
