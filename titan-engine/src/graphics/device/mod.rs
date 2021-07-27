@@ -34,13 +34,14 @@ lazy_static::lazy_static! {
 pub struct Device {
     key: Key,
     loader: Mutex<ash::Device>,
-    queue_create_infos: Vec<vk::DeviceQueueCreateInfo>,
+    queue_create_infos: Vec<QueueInfo>,
     parent_physical_device: physical::Key,
 }
 
-unsafe impl Send for Device {}
-
-unsafe impl Sync for Device {}
+struct QueueInfo {
+    family_index: u32,
+    priorities: Box<[f32]>,
+}
 
 impl Device {
     pub fn new(surface_key: surface::Key, physical_device_key: physical::Key) -> Result<Key> {
@@ -75,7 +76,6 @@ impl Device {
                 vk::DeviceQueueCreateInfo::builder()
                     .queue_family_index(family_index)
                     .queue_priorities(&priorities)
-                    .build()
             })
             .collect();
 
@@ -94,6 +94,8 @@ impl Device {
             .map(|item| item.extension_name.as_ptr())
             .collect();
         let features = vk::PhysicalDeviceFeatures::builder();
+        let queue_create_infos: Vec<_> =
+            queue_create_infos.iter().map(|builder| **builder).collect();
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(queue_create_infos.as_slice())
             .enabled_layer_names(&*p_layer_properties_names)
@@ -110,7 +112,18 @@ impl Device {
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {
             key,
-            queue_create_infos,
+            queue_create_infos: queue_create_infos
+                .into_iter()
+                .map(|info| QueueInfo {
+                    family_index: info.queue_family_index,
+                    priorities: Box::from(unsafe {
+                        std::slice::from_raw_parts(
+                            info.p_queue_priorities,
+                            info.queue_count as usize,
+                        )
+                    }),
+                })
+                .collect(),
             loader: Mutex::new(loader),
             parent_physical_device: physical_device_key,
         });
@@ -128,8 +141,10 @@ impl Device {
     pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>> {
         let mut queues = Vec::new();
         for create_info in self.queue_create_infos.iter() {
-            let vector = (0..create_info.queue_count)
-                .map(|index| unsafe { Queue::new(self.key, create_info.queue_family_index, index) })
+            let vector = (0..create_info.priorities.len())
+                .map(|index| unsafe {
+                    Queue::new(self.key, create_info.family_index, index as u32)
+                })
                 .collect::<Result<Vec<_>>>()?;
             queues.extend(vector.into_iter());
         }
