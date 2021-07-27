@@ -69,7 +69,7 @@ impl GraphicsPipeline {
             .get(frag_shader_module_key)
             .expect("shader module not found");
 
-        let shader_stage_info_name = crate::c_str!("main");
+        let shader_stage_info_name = c_str_macro::c_str!("main");
         let vert_shader_stage_info = vk::PipelineShaderStageCreateInfo::builder()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vert_shader_module.handle())

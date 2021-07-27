@@ -22,7 +22,7 @@ use super::{
 };
 
 lazy_static::lazy_static! {
-    static ref VALIDATION_LAYER_NAME: &'static CStr = crate::c_str!("VK_LAYER_KHRONOS_validation");
+    pub static ref VALIDATION_LAYER_NAME: &'static CStr = c_str_macro::c_str!("VK_LAYER_KHRONOS_validation");
 }
 
 pub const ENABLE_VALIDATION: bool = cfg!(debug_assertions);

@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
 }
 
 impl Config {
-    pub fn new(name: String, version: Version) -> Self {
+    pub const fn new(name: String, version: Version) -> Self {
         Self { name, version }
     }
 

@@ -86,6 +86,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 
 [[package]]
+name = "c_str_macro"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6d44951c469019e225e7667d799052f67fb8ea358d086878f3582b39f0de5e5"
+
+[[package]]
 name = "calloop"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1004,6 +1010,7 @@ version = "0.1.0"
 dependencies = [
  "ash",
  "ash-window",
+ "c_str_macro",
  "jni",
  "lazy_static",
  "log",

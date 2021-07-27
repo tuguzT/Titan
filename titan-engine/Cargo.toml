@@ -10,6 +10,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 proc-macro = { path = "src/proc-macro" }
+c_str_macro = "1.0.3"
 semver = "1.0.3"
 ash = "0.32.1"
 ash-window = "0.6.0"

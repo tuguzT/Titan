@@ -1,20 +1,6 @@
 use ash::vk;
 use semver::Version;
 
-#[macro_export]
-macro_rules! c_str {
-    ($s:expr) => {
-        unsafe { ::std::ffi::CStr::from_ptr(crate::c_str_ptr!($s)) }
-    };
-}
-
-#[macro_export]
-macro_rules! c_str_ptr {
-    ($s:expr) => {
-        concat!($s, "\0").as_ptr() as *const ::std::os::raw::c_char
-    };
-}
-
 #[inline]
 pub const fn to_vk_version(version: &Version) -> u32 {
     vk::make_version(
