@@ -4,13 +4,13 @@ use winit::window::Window;
 
 use command::{CommandBuffer, CommandPool};
 use device::{Device, PhysicalDevice, Queue};
-use ext::{debug_utils, swapchain, DebugUtils, Swapchain};
+use ext::{DebugUtils, Swapchain};
 use framebuffer::Framebuffer;
 use image::{Image, ImageView};
 use instance::Instance;
 use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
-use sync::{fence, semaphore, Fence, Semaphore};
+use sync::{Fence, Semaphore};
 
 use crate::{
     config::Config,
@@ -37,9 +37,9 @@ const MAX_FRAMES_IN_FLIGHT: usize = 10;
 pub struct Renderer {
     frame_index: usize,
     images_in_flight: Vec<vk::Fence>,
-    in_flight_fences: Vec<fence::Key>,
-    render_finished_semaphores: Vec<semaphore::Key>,
-    image_available_semaphores: Vec<semaphore::Key>,
+    in_flight_fences: Vec<sync::fence::Key>,
+    render_finished_semaphores: Vec<sync::semaphore::Key>,
+    image_available_semaphores: Vec<sync::semaphore::Key>,
     command_buffers: Vec<command::buffer::Key>,
     command_pool: command::pool::Key,
     framebuffers: Vec<framebuffer::Key>,
@@ -48,12 +48,12 @@ pub struct Renderer {
     render_pass: pipeline::render_pass::Key,
     swapchain_image_views: Vec<image::view::Key>,
     swapchain_images: Vec<image::Key>,
-    swapchain: swapchain::Key,
+    swapchain: ext::swapchain::Key,
     device_queues: Vec<device::queue::Key>,
     device: device::Key,
     physical_device: device::physical::Key,
     surface: surface::Key,
-    debug_utils: Option<debug_utils::Key>,
+    debug_utils: Option<ext::debug_utils::Key>,
     instance: instance::Key,
 
     window: Window,

@@ -9,9 +9,9 @@ use crate::error::{Error, Result};
 
 use super::{
     device::Device,
+    ext::Swapchain,
     shader::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE},
     slotmap::SlotMappable,
-    swapchain::Swapchain,
 };
 
 pub mod layout;

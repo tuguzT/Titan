@@ -23,7 +23,7 @@ pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/fra
 pub struct ShaderModule {
     key: Key,
     handle: vk::ShaderModule,
-    code: Vec<u32>,
+    code: Box<[u32]>,
     parent_device: device::Key,
 }
 
@@ -32,11 +32,13 @@ impl ShaderModule {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
-        let code = ash::util::read_spv(&mut Cursor::new(code)).map_err(|error| Error::Other {
-            message: error.to_string(),
-            source: Some(error.into()),
-        })?;
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_slice());
+        let code = ash::util::read_spv(&mut Cursor::new(code))
+            .map_err(|error| Error::Other {
+                message: error.to_string(),
+                source: Some(error.into()),
+            })?
+            .into_boxed_slice();
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(code.as_ref());
         let handle = unsafe { device.loader().create_shader_module(&create_info, None)? };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
@@ -54,7 +56,7 @@ impl ShaderModule {
     }
 
     pub fn code(&self) -> &[u32] {
-        self.code.as_slice()
+        self.code.as_ref()
     }
 
     pub fn parent_device(&self) -> device::Key {
