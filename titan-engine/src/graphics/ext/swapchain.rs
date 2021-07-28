@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::ffi::CStr;
 use std::ops::Deref;
 
@@ -46,6 +45,13 @@ impl Swapchain {
             .get(physical_device_key)
             .expect("physical device not found");
 
+        if !surface.is_suitable(physical_device)? {
+            return Err(Error::Other {
+                message: String::from("surface must be supported by the given device"),
+                source: None,
+            });
+        }
+
         let surface_instance = surface.parent_instance();
         let physical_device_instance = physical_device.parent_instance();
         if surface_instance != physical_device_instance {
@@ -72,32 +78,45 @@ impl Swapchain {
         let capabilities = surface.physical_device_capabilities(physical_device)?;
         let suitable_extent = Self::pick_extent(window, &capabilities);
 
-        let mut image_count = capabilities.min_image_count + 1;
-        if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
-            image_count = capabilities.max_image_count
+        if suitable_extent.height == 0 || suitable_extent.width == 0 {
+            return Err(Error::Other {
+                message: String::from("imageExtent width and height must both be non-zero"),
+                source: None,
+            });
+        }
+
+        let min_image_count = {
+            let mut min_image_count = capabilities.min_image_count + 1;
+            if capabilities.max_image_count > 0 && min_image_count > capabilities.max_image_count {
+                min_image_count = capabilities.max_image_count
+            };
+            min_image_count
         };
-        let mut create_info = vk::SwapchainCreateInfoKHR::builder()
-            .surface(surface.handle())
-            .min_image_count(image_count)
-            .image_format(suitable_format.format)
-            .image_color_space(suitable_format.color_space)
-            .image_extent(suitable_extent)
-            .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .pre_transform(capabilities.current_transform)
-            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(*suitable_present_mode)
-            .clipped(true);
+
         let graphics_index = physical_device.graphics_family_index()?;
         let present_index = physical_device.present_family_index(surface)?;
         let queue_family_indices = [graphics_index, present_index];
-        if graphics_index != present_index {
-            create_info = create_info
-                .image_sharing_mode(vk::SharingMode::CONCURRENT)
-                .queue_family_indices(queue_family_indices.borrow());
-        } else {
-            create_info = create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
-        }
+        let create_info = {
+            let create_info = vk::SwapchainCreateInfoKHR::builder()
+                .surface(surface.handle())
+                .min_image_count(min_image_count)
+                .image_format(suitable_format.format)
+                .image_color_space(suitable_format.color_space)
+                .image_extent(suitable_extent)
+                .image_array_layers(1)
+                .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+                .pre_transform(capabilities.current_transform)
+                .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+                .present_mode(*suitable_present_mode)
+                .clipped(true);
+            if graphics_index != present_index {
+                create_info
+                    .image_sharing_mode(vk::SharingMode::CONCURRENT)
+                    .queue_family_indices(&queue_family_indices)
+            } else {
+                create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            }
+        };
 
         let loader = instance.loader();
         let loader = SwapchainLoader::new(loader.instance(), device.loader().deref());
