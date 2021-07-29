@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -7,7 +9,8 @@ use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -19,6 +22,20 @@ pub struct Fence {
     key: Key,
     handle: vk::Fence,
     parent_device: device::Key,
+}
+
+impl HasParent<Device> for Fence {
+    fn parent_key(&self) -> device::Key {
+        self.parent_device
+    }
+}
+
+impl HasHandle for Fence {
+    type Handle = vk::Fence;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
 }
 
 impl Fence {
@@ -35,21 +52,13 @@ impl Fence {
         });
         Ok(key)
     }
-
-    pub fn handle(&self) -> vk::Fence {
-        self.handle
-    }
-
-    pub fn parent_device(&self) -> device::Key {
-        self.parent_device
-    }
 }
 
 impl Drop for Fence {
     fn drop(&mut self) {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device
-            .get(self.parent_device())
+            .get(self.parent_key())
             .expect("device not found");
         let loader = device.loader();
         unsafe { loader.destroy_fence(self.handle, None) }

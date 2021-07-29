@@ -1,5 +1,21 @@
+use std::ops::Deref;
+
 use ash::vk;
 use semver::Version;
+
+pub trait HasHandle {
+    type Handle;
+
+    // FIXME: change to `impl Deref<...>` if stable
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_>;
+}
+
+pub trait HasLoader {
+    type Loader;
+
+    // FIXME: change to `impl Deref<...>` if stable
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_>;
+}
 
 #[inline]
 pub const fn to_vk_version(version: &Version) -> u32 {

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
+use std::ops::Deref;
 use std::os::raw::c_void;
 
 use ash::extensions::ext::DebugUtils as DebugUtilsLoader;
@@ -12,7 +13,8 @@ use crate::error::Result;
 
 use super::super::{
     instance::{self, Instance},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -25,6 +27,28 @@ pub struct DebugUtils {
     loader: DebugUtilsLoader,
     messenger: vk::DebugUtilsMessengerEXT,
     parent_instance: instance::Key,
+}
+
+impl HasParent<Instance> for DebugUtils {
+    fn parent_key(&self) -> instance::Key {
+        self.parent_instance
+    }
+}
+
+impl HasLoader for DebugUtils {
+    type Loader = DebugUtilsLoader;
+
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_> {
+        Box::new(&self.loader)
+    }
+}
+
+impl HasHandle for DebugUtils {
+    type Handle = vk::DebugUtilsMessengerEXT;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.messenger)
+    }
 }
 
 impl DebugUtils {
@@ -49,10 +73,6 @@ impl DebugUtils {
             parent_instance: instance_key,
         });
         Ok(key)
-    }
-
-    pub fn parent_instance(&self) -> instance::Key {
-        self.parent_instance
     }
 
     pub fn name() -> &'static CStr {

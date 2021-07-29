@@ -13,8 +13,9 @@ use super::super::{
     device::{self, Device, PhysicalDevice},
     image::{self, Image},
     instance::Instance,
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
     surface::{self, Surface},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -32,6 +33,34 @@ pub struct Swapchain {
     parent_surface: surface::Key,
 }
 
+impl HasParent<Device> for Swapchain {
+    fn parent_key(&self) -> device::Key {
+        self.parent_device
+    }
+}
+
+impl HasParent<Surface> for Swapchain {
+    fn parent_key(&self) -> surface::Key {
+        self.parent_surface
+    }
+}
+
+impl HasLoader for Swapchain {
+    type Loader = SwapchainLoader;
+
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_> {
+        Box::new(&self.loader)
+    }
+}
+
+impl HasHandle for Swapchain {
+    type Handle = vk::SwapchainKHR;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
+}
+
 impl Swapchain {
     pub fn new(window: &Window, device_key: device::Key, surface_key: surface::Key) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
@@ -39,7 +68,7 @@ impl Swapchain {
         let slotmap_surface = SlotMappable::slotmap().read().unwrap();
         let surface: &Surface = slotmap_surface.get(surface_key).expect("surface not found");
 
-        let physical_device_key = device.parent_physical_device();
+        let physical_device_key = device.parent_key();
         let slotmap_physical_device = SlotMappable::slotmap().read().unwrap();
         let physical_device: &PhysicalDevice = slotmap_physical_device
             .get(physical_device_key)
@@ -52,8 +81,8 @@ impl Swapchain {
             });
         }
 
-        let surface_instance = surface.parent_instance();
-        let physical_device_instance = physical_device.parent_instance();
+        let surface_instance = surface.parent_key();
+        let physical_device_instance = physical_device.parent_key();
         if surface_instance != physical_device_instance {
             return Err(Error::Other {
                 message: String::from("surface and physical device parents must be the same"),
@@ -119,7 +148,9 @@ impl Swapchain {
         };
 
         let loader = instance.loader();
-        let loader = SwapchainLoader::new(loader.instance(), device.loader().deref());
+        let device_loader = device.loader();
+        let device_loader = device_loader.deref().deref().deref();
+        let loader = SwapchainLoader::new(loader.instance(), device_loader);
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
@@ -135,22 +166,6 @@ impl Swapchain {
         Ok(key)
     }
 
-    pub fn loader(&self) -> &SwapchainLoader {
-        &self.loader
-    }
-
-    pub fn handle(&self) -> vk::SwapchainKHR {
-        self.handle
-    }
-
-    pub fn parent_device(&self) -> device::Key {
-        self.parent_device
-    }
-
-    pub fn parent_surface(&self) -> surface::Key {
-        self.parent_surface
-    }
-
     pub fn format(&self) -> vk::SurfaceFormatKHR {
         self.format
     }
@@ -160,7 +175,7 @@ impl Swapchain {
     }
 
     pub fn enumerate_images(&self) -> Result<Vec<image::Key>> {
-        let device = self.parent_device();
+        let device = self.parent_device;
         let handles = unsafe { self.loader.get_swapchain_images(self.handle)? };
         handles
             .into_iter()

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -11,7 +13,8 @@ use super::{
     device::Device,
     ext::Swapchain,
     shader::{ShaderModule, FRAG_SHADER_CODE, VERT_SHADER_CODE},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 pub mod layout;
@@ -29,6 +32,26 @@ pub struct GraphicsPipeline {
     parent_pipeline_layout: layout::Key,
 }
 
+impl HasParent<RenderPass> for GraphicsPipeline {
+    fn parent_key(&self) -> render_pass::Key {
+        self.parent_render_pass
+    }
+}
+
+impl HasParent<PipelineLayout> for GraphicsPipeline {
+    fn parent_key(&self) -> layout::Key {
+        self.parent_pipeline_layout
+    }
+}
+
+impl HasHandle for GraphicsPipeline {
+    type Handle = vk::Pipeline;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
+}
+
 impl GraphicsPipeline {
     pub fn new(render_pass_key: render_pass::Key, pipeline_layout_key: layout::Key) -> Result<Key> {
         let slotmap_pipeline_layout = SlotMappable::slotmap().read().unwrap();
@@ -41,14 +64,15 @@ impl GraphicsPipeline {
             .get(render_pass_key)
             .expect("render pass not found");
 
-        let swapchain_key = render_pass.parent_swapchain();
+        let swapchain_key = render_pass.parent_key();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let render_pass_swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
             .expect("swapchain not found");
 
-        let render_pass_device = render_pass_swapchain.parent_device();
-        let pipeline_layout_device = pipeline_layout.parent_device();
+        let render_pass_device =
+            <Swapchain as HasParent<Device>>::parent_key(render_pass_swapchain);
+        let pipeline_layout_device = pipeline_layout.parent_key();
         if render_pass_device != pipeline_layout_device {
             return Err(Error::Other {
                 message: String::from("pipeline layout and render pass must have the same parent"),
@@ -137,8 +161,8 @@ impl GraphicsPipeline {
             .rasterization_state(&rasterizer)
             .multisample_state(&multisampling)
             .color_blend_state(&color_blending)
-            .layout(pipeline_layout.handle())
-            .render_pass(render_pass.handle())
+            .layout(**pipeline_layout.handle())
+            .render_pass(**render_pass.handle())
             .subpass(0)
             .base_pipeline_index(-1);
         let create_infos = [*create_info];
@@ -169,36 +193,24 @@ impl GraphicsPipeline {
         });
         Ok(key)
     }
-
-    pub fn handle(&self) -> vk::Pipeline {
-        self.handle
-    }
-
-    pub fn parent_render_pass(&self) -> render_pass::Key {
-        self.parent_render_pass
-    }
-
-    pub fn parent_pipeline_layout(&self) -> layout::Key {
-        self.parent_pipeline_layout
-    }
 }
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
         let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
+        let render_pass_key = <Self as HasParent<RenderPass>>::parent_key(self);
         let render_pass: &RenderPass = slotmap_render_pass
-            .get(self.parent_render_pass())
+            .get(render_pass_key)
             .expect("render pass not found");
 
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
-            .get(render_pass.parent_swapchain())
+            .get(render_pass.parent_key())
             .expect("swapchain not found");
 
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let device: &Device = slotmap_device
-            .get(swapchain.parent_device())
-            .expect("device not found");
+        let device_key = <Swapchain as HasParent<Device>>::parent_key(swapchain);
+        let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();
         unsafe { loader.destroy_pipeline(self.handle, None) }
     }

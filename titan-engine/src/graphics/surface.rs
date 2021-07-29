@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::vk;
 use winit::window::Window;
 
@@ -6,9 +8,10 @@ use proc_macro::SlotMappable;
 use crate::error::Result;
 
 use super::{
+    device::PhysicalDevice,
     instance::{self, Instance},
-    slotmap::SlotMappable,
-    PhysicalDevice,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -23,6 +26,28 @@ pub struct Surface {
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,
     parent_instance: instance::Key,
+}
+
+impl HasParent<Instance> for Surface {
+    fn parent_key(&self) -> instance::Key {
+        self.parent_instance
+    }
+}
+
+impl HasLoader for Surface {
+    type Loader = SurfaceLoader;
+
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_> {
+        Box::new(&self.loader)
+    }
+}
+
+impl HasHandle for Surface {
+    type Handle = vk::SurfaceKHR;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
 }
 
 impl Surface {
@@ -53,10 +78,6 @@ impl Surface {
 
     pub fn handle(&self) -> vk::SurfaceKHR {
         self.handle
-    }
-
-    pub fn parent_instance(&self) -> instance::Key {
-        self.parent_instance
     }
 
     pub fn physical_device_capabilities(

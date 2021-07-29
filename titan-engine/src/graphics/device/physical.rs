@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
 use std::ffi::CStr;
+use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
 
 use ash::prelude::VkResult;
 use ash::version::InstanceV1_0;
 use ash::vk;
+use owning_ref::MutexGuardRef;
 
 use proc_macro::SlotMappable;
 
@@ -12,8 +14,9 @@ use crate::error::{Error, Result};
 
 use super::super::{
     instance::{self, Instance},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
     surface::Surface,
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -31,6 +34,20 @@ pub struct PhysicalDevice {
     extension_properties: Vec<vk::ExtensionProperties>,
     handle: Mutex<vk::PhysicalDevice>,
     parent_instance: instance::Key,
+}
+
+impl HasParent<Instance> for PhysicalDevice {
+    fn parent_key(&self) -> instance::Key {
+        self.parent_instance
+    }
+}
+
+impl HasHandle for PhysicalDevice {
+    type Handle = vk::PhysicalDevice;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(MutexGuardRef::new(self.handle.lock().unwrap()))
+    }
 }
 
 impl PhysicalDevice {
@@ -76,10 +93,6 @@ impl PhysicalDevice {
 
     pub fn handle(&self) -> MutexGuard<vk::PhysicalDevice> {
         self.handle.lock().unwrap()
-    }
-
-    pub fn parent_instance(&self) -> instance::Key {
-        self.parent_instance
     }
 
     pub fn is_suitable(&self) -> bool {

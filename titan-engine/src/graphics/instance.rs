@@ -1,9 +1,11 @@
 use std::ffi::{CStr, CString};
+use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
+use owning_ref::MutexGuardRef;
 use semver::Version;
 use winit::window::Window;
 
@@ -18,7 +20,7 @@ use super::{
     device::{self, PhysicalDevice},
     ext::DebugUtils,
     slotmap::SlotMappable,
-    utils,
+    utils::{self, HasHandle, HasLoader},
 };
 
 lazy_static::lazy_static! {
@@ -34,6 +36,7 @@ slotmap::new_key_type! {
 pub struct Loader {
     entry: ash::Entry,
     instance: ash::Instance,
+    handle: vk::Instance,
 }
 
 impl Loader {
@@ -53,6 +56,22 @@ pub struct Instance {
     layer_properties: Vec<vk::LayerProperties>,
     extension_properties: Vec<vk::ExtensionProperties>,
     loader: Mutex<Loader>,
+}
+
+impl HasLoader for Instance {
+    type Loader = Loader;
+
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_> {
+        Box::new(self.loader.lock().unwrap())
+    }
+}
+
+impl HasHandle for Instance {
+    type Handle = vk::Instance;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(MutexGuardRef::new(self.loader.lock().unwrap()).map(|loader| &loader.handle))
+    }
 }
 
 impl Instance {
@@ -159,6 +178,7 @@ impl Instance {
             layer_properties,
             extension_properties,
             loader: Mutex::new(Loader {
+                handle: instance_loader.handle(),
                 entry: entry_loader,
                 instance: instance_loader,
             }),
@@ -168,10 +188,6 @@ impl Instance {
 
     pub fn version(&self) -> &Version {
         &self.version
-    }
-
-    pub fn loader(&self) -> MutexGuard<Loader> {
-        self.loader.lock().unwrap()
     }
 
     pub fn enumerate_physical_devices(&self) -> Result<Vec<device::physical::Key>> {

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -7,7 +9,8 @@ use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -19,6 +22,20 @@ pub struct Semaphore {
     key: Key,
     handle: vk::Semaphore,
     parent_device: device::Key,
+}
+
+impl HasParent<Device> for Semaphore {
+    fn parent_key(&self) -> device::Key {
+        self.parent_device
+    }
+}
+
+impl HasHandle for Semaphore {
+    type Handle = vk::Semaphore;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
 }
 
 impl Semaphore {
@@ -37,21 +54,13 @@ impl Semaphore {
         });
         Ok(key)
     }
-
-    pub fn handle(&self) -> vk::Semaphore {
-        self.handle
-    }
-
-    pub fn parent_device(&self) -> device::Key {
-        self.parent_device
-    }
 }
 
 impl Drop for Semaphore {
     fn drop(&mut self) {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device
-            .get(self.parent_device())
+            .get(self.parent_key())
             .expect("device not found");
         let loader = device.loader();
         unsafe { loader.destroy_semaphore(self.handle, None) }

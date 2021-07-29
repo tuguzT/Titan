@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::ffi::CStr;
+use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
+use owning_ref::MutexGuardRef;
 
 pub use physical::PhysicalDevice;
 use proc_macro::SlotMappable;
@@ -15,8 +17,9 @@ use crate::error::{Error, Result};
 use super::{
     ext::Swapchain,
     instance::Instance,
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
     surface::{self, Surface},
+    utils::{HasHandle, HasLoader},
 };
 
 pub mod physical;
@@ -30,17 +33,58 @@ lazy_static::lazy_static! {
     static ref REQUIRED_EXTENSIONS: Vec<&'static CStr> = vec![Swapchain::name()];
 }
 
+struct QueueInfo {
+    family_index: u32,
+    priorities: Box<[f32]>,
+}
+
+pub struct Loader {
+    loader: ash::Device,
+    handle: vk::Device,
+}
+
+impl Loader {
+    pub fn handle(&self) -> &vk::Device {
+        &self.handle
+    }
+}
+
+impl Deref for Loader {
+    type Target = ash::Device;
+
+    fn deref(&self) -> &Self::Target {
+        &self.loader
+    }
+}
+
 #[derive(SlotMappable)]
 pub struct Device {
     key: Key,
-    loader: Mutex<ash::Device>,
+    loader: Mutex<Loader>,
     queue_create_infos: Vec<QueueInfo>,
     parent_physical_device: physical::Key,
 }
 
-struct QueueInfo {
-    family_index: u32,
-    priorities: Box<[f32]>,
+impl HasParent<PhysicalDevice> for Device {
+    fn parent_key(&self) -> physical::Key {
+        self.parent_physical_device
+    }
+}
+
+impl HasLoader for Device {
+    type Loader = Loader;
+
+    fn loader(&self) -> Box<dyn Deref<Target = Self::Loader> + '_> {
+        Box::new(MutexGuardRef::new(self.loader.lock().unwrap()))
+    }
+}
+
+impl HasHandle for Device {
+    type Handle = vk::Device;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(MutexGuardRef::new(self.loader.lock().unwrap()).map(|loader| loader.handle()))
+    }
 }
 
 impl Device {
@@ -52,8 +96,8 @@ impl Device {
             .get(physical_device_key)
             .expect("physical device not found");
 
-        let surface_instance = surface.parent_instance();
-        let physical_device_instance = physical_device.parent_instance();
+        let surface_instance = surface.parent_key();
+        let physical_device_instance = physical_device.parent_key();
         if surface_instance != physical_device_instance {
             return Err(Error::Other {
                 message: String::from("surface and physical device parents must be the same"),
@@ -124,18 +168,13 @@ impl Device {
                     }),
                 })
                 .collect(),
-            loader: Mutex::new(loader),
+            loader: Mutex::new(Loader {
+                handle: loader.handle(),
+                loader,
+            }),
             parent_physical_device: physical_device_key,
         });
         Ok(key)
-    }
-
-    pub fn loader(&self) -> MutexGuard<ash::Device> {
-        self.loader.lock().unwrap()
-    }
-
-    pub fn parent_physical_device(&self) -> physical::Key {
-        self.parent_physical_device
     }
 
     pub fn enumerate_queues(&self) -> Result<Vec<queue::Key>> {

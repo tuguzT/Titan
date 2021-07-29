@@ -11,6 +11,7 @@ use instance::Instance;
 use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
 use surface::Surface;
 use sync::{Fence, Semaphore};
+use utils::{HasHandle, HasLoader};
 
 use crate::{
     config::Config,
@@ -164,7 +165,7 @@ impl Renderer {
                 .map(|&image_key| unsafe {
                     let image: &Image = slotmap_image.get(image_key).expect("image not found");
                     let create_info = vk::ImageViewCreateInfo::builder()
-                        .image(image.handle())
+                        .image(**image.handle())
                         .view_type(vk::ImageViewType::TYPE_2D)
                         .format(swapchain.format().format)
                         .components(vk::ComponentMapping {
@@ -201,9 +202,10 @@ impl Renderer {
                     let image_view: &ImageView =
                         slotmap.get(image_view).expect("image view not found");
                     let attachments = [image_view.handle()];
+                    let attachments: Vec<_> = attachments.iter().map(|handle| ***handle).collect();
                     let create_info = vk::FramebufferCreateInfo::builder()
                         .attachments(&attachments)
-                        .render_pass(render_pass.handle())
+                        .render_pass(**render_pass.handle())
                         .width(swapchain.extent().width)
                         .height(swapchain.extent().height)
                         .layers(1);
@@ -265,8 +267,8 @@ impl Renderer {
                 };
                 let clear_values = [clear_color];
                 let begin_info = vk::RenderPassBeginInfo::builder()
-                    .render_pass(render_pass_ref.handle())
-                    .framebuffer(framebuffer.handle())
+                    .render_pass(**render_pass_ref.handle())
+                    .framebuffer(**framebuffer.handle())
                     .render_area(vk::Rect2D {
                         offset: Default::default(),
                         extent: swapchain_ref.extent(),
@@ -276,13 +278,13 @@ impl Renderer {
 
                 let command_buffer_handle = command_buffer.handle();
                 device_ref.loader().cmd_bind_pipeline(
-                    *command_buffer_handle,
+                    **command_buffer_handle,
                     vk::PipelineBindPoint::GRAPHICS,
-                    graphics_pipeline_ref.handle(),
+                    **graphics_pipeline_ref.handle(),
                 );
                 device_ref
                     .loader()
-                    .cmd_draw(*command_buffer_handle, 3, 1, 0, 0);
+                    .cmd_draw(**command_buffer_handle, 3, 1, 0, 0);
                 drop(command_buffer_handle);
 
                 render_pass_ref.end(command_buffer)?;
@@ -363,17 +365,18 @@ impl Renderer {
         let queue_handle = queue.handle();
 
         unsafe {
-            let fences = [in_flight_fence.handle()];
+            let fences = [**in_flight_fence.handle()];
             device.loader().wait_for_fences(&fences, true, u64::MAX)?;
         }
 
         let image_index = unsafe {
+            let handle = swapchain.handle();
             swapchain
                 .loader()
                 .acquire_next_image(
-                    swapchain.handle(),
+                    **handle,
                     u64::MAX,
-                    image_available_semaphore.handle(),
+                    **image_available_semaphore.handle(),
                     vk::Fence::null(),
                 )?
                 .0 as usize
@@ -389,12 +392,12 @@ impl Renderer {
                 device.loader().wait_for_fences(&fences, true, u64::MAX)?;
             }
         }
-        self.images_in_flight[image_index] = in_flight_fence.handle();
+        self.images_in_flight[image_index] = **in_flight_fence.handle();
 
-        let wait_semaphores = [image_available_semaphore.handle()];
-        let signal_semaphores = [render_finished_semaphore.handle()];
+        let wait_semaphores = [**image_available_semaphore.handle()];
+        let signal_semaphores = [**render_finished_semaphore.handle()];
         let command_buffers = [command_buffer.handle()];
-        let command_buffers: Vec<_> = command_buffers.iter().map(|cb| **cb).collect();
+        let command_buffers: Vec<_> = command_buffers.iter().map(|cb| ***cb).collect();
         let submit_info = vk::SubmitInfo::builder()
             .wait_semaphores(&wait_semaphores)
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
@@ -402,13 +405,14 @@ impl Renderer {
             .signal_semaphores(&signal_semaphores);
         let submits = [*submit_info];
         unsafe {
-            let fences = [in_flight_fence.handle()];
+            let fences = [**in_flight_fence.handle()];
             device.loader().reset_fences(&fences)?;
             device
                 .loader()
-                .queue_submit(*queue_handle, &submits, in_flight_fence.handle())?;
+                .queue_submit(**queue_handle, &submits, **in_flight_fence.handle())?;
         }
         let swapchains = [swapchain.handle()];
+        let swapchains: Vec<_> = swapchains.iter().map(|handle| ***handle).collect();
         let image_indices = [image_index as u32];
         let present_info = vk::PresentInfoKHR::builder()
             .wait_semaphores(&signal_semaphores)
@@ -417,7 +421,7 @@ impl Renderer {
         unsafe {
             swapchain
                 .loader()
-                .queue_present(*queue_handle, &present_info)?;
+                .queue_present(**queue_handle, &present_info)?;
         }
         self.frame_index = (self.frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())

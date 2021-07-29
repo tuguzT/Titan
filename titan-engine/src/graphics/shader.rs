@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 use super::{
     device::{self, Device},
     slotmap::SlotMappable,
+    utils::HasLoader,
 };
 
 slotmap::new_key_type! {

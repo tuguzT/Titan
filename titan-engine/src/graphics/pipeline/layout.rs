@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -7,7 +9,8 @@ use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -19,6 +22,20 @@ pub struct PipelineLayout {
     key: Key,
     handle: vk::PipelineLayout,
     parent_device: device::Key,
+}
+
+impl HasParent<Device> for PipelineLayout {
+    fn parent_key(&self) -> device::Key {
+        self.parent_device
+    }
+}
+
+impl HasHandle for PipelineLayout {
+    type Handle = vk::PipelineLayout;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
 }
 
 impl PipelineLayout {
@@ -43,21 +60,13 @@ impl PipelineLayout {
         let create_info = vk::PipelineLayoutCreateInfo::default();
         unsafe { Self::with(device_key, &create_info) }
     }
-
-    pub fn handle(&self) -> vk::PipelineLayout {
-        self.handle
-    }
-
-    pub fn parent_device(&self) -> device::Key {
-        self.parent_device
-    }
 }
 
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device
-            .get(self.parent_device())
+            .get(self.parent_key())
             .expect("device not found");
         let loader = device.loader();
         unsafe { loader.destroy_pipeline_layout(self.handle, None) }

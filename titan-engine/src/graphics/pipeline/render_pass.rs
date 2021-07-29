@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -9,7 +11,8 @@ use super::super::{
     command::CommandBuffer,
     device::Device,
     ext::swapchain::{self, Swapchain},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -23,6 +26,20 @@ pub struct RenderPass {
     parent_swapchain: swapchain::Key,
 }
 
+impl HasParent<Swapchain> for RenderPass {
+    fn parent_key(&self) -> swapchain::Key {
+        self.parent_swapchain
+    }
+}
+
+impl HasHandle for RenderPass {
+    type Handle = vk::RenderPass;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(&self.handle)
+    }
+}
+
 impl RenderPass {
     pub fn new(swapchain_key: swapchain::Key) -> Result<Key> {
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
@@ -30,7 +47,7 @@ impl RenderPass {
             .get(swapchain_key)
             .expect("swapchain not found");
 
-        let device_key = swapchain.parent_device();
+        let device_key = <Swapchain as HasParent<Device>>::parent_key(swapchain);
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
 
@@ -79,61 +96,55 @@ impl RenderPass {
         Ok(key)
     }
 
-    pub fn handle(&self) -> vk::RenderPass {
-        self.handle
-    }
-
-    pub fn parent_swapchain(&self) -> swapchain::Key {
-        self.parent_swapchain
-    }
-
     pub unsafe fn begin(
         &self,
         command_buffer: &CommandBuffer,
         begin_info: &vk::RenderPassBeginInfo,
         contents: vk::SubpassContents,
     ) -> Result<()> {
-        let swapchain_key = self.parent_swapchain();
+        let swapchain_key = self.parent_key();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
             .expect("swapchain not found");
 
-        let device_key = swapchain.parent_device();
+        let device_key = <Swapchain as HasParent<Device>>::parent_key(swapchain);
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();
+        let handle = command_buffer.handle();
 
-        loader.cmd_begin_render_pass(*command_buffer.handle(), &begin_info, contents);
+        loader.cmd_begin_render_pass(**handle, &begin_info, contents);
         Ok(())
     }
 
     pub unsafe fn end(&self, command_buffer: &CommandBuffer) -> Result<()> {
-        let swapchain_key = self.parent_swapchain();
+        let swapchain_key = self.parent_key();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
             .expect("swapchain not found");
 
-        let device_key = swapchain.parent_device();
+        let device_key = <Swapchain as HasParent<Device>>::parent_key(swapchain);
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();
+        let handle = command_buffer.handle();
 
-        loader.cmd_end_render_pass(*command_buffer.handle());
+        loader.cmd_end_render_pass(**handle);
         Ok(())
     }
 }
 
 impl Drop for RenderPass {
     fn drop(&mut self) {
-        let swapchain_key = self.parent_swapchain();
+        let swapchain_key = self.parent_key();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let swapchain: &Swapchain = slotmap_swapchain
             .get(swapchain_key)
             .expect("swapchain not found");
 
-        let device_key = swapchain.parent_device();
+        let device_key = <Swapchain as HasParent<Device>>::parent_key(swapchain);
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
         let loader = device.loader();

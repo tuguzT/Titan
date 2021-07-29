@@ -9,3 +9,11 @@ pub trait SlotMappable: Sized + Send + Sync + 'static {
 
     fn slotmap() -> &'static RwLock<SlotMap<Self::Key, Self>>;
 }
+
+pub trait HasParent<Parent>
+where
+    Self: SlotMappable,
+    Parent: SlotMappable,
+{
+    fn parent_key(&self) -> Parent::Key;
+}

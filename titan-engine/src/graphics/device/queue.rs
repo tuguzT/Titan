@@ -1,4 +1,5 @@
-use std::sync::{Mutex, MutexGuard};
+use std::ops::Deref;
+use std::sync::Mutex;
 
 use ash::version::DeviceV1_0;
 use ash::vk;
@@ -9,7 +10,8 @@ use crate::error::Result;
 
 use super::super::{
     device::{self, Device},
-    slotmap::SlotMappable,
+    slotmap::{HasParent, SlotMappable},
+    utils::{HasHandle, HasLoader},
 };
 
 slotmap::new_key_type! {
@@ -22,6 +24,20 @@ pub struct Queue {
     family_index: u32,
     handle: Mutex<vk::Queue>,
     parent_device: device::Key,
+}
+
+impl HasParent<Device> for Queue {
+    fn parent_key(&self) -> device::Key {
+        self.parent_device
+    }
+}
+
+impl HasHandle for Queue {
+    type Handle = vk::Queue;
+
+    fn handle(&self) -> Box<dyn Deref<Target = Self::Handle> + '_> {
+        Box::new(self.handle.lock().unwrap())
+    }
 }
 
 impl Queue {
@@ -42,13 +58,5 @@ impl Queue {
             parent_device: device_key,
         });
         Ok(key)
-    }
-
-    pub fn handle(&self) -> MutexGuard<vk::Queue> {
-        self.handle.lock().unwrap()
-    }
-
-    pub fn parent_device(&self) -> device::Key {
-        self.parent_device
     }
 }
