@@ -1,5 +1,5 @@
-pub use buffer::CommandBuffer;
+pub use buffers::{CommandBuffer, CommandBuffers};
 pub use pool::CommandPool;
 
-pub mod buffer;
+pub mod buffers;
 pub mod pool;

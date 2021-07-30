@@ -2,7 +2,7 @@ use ash::version::DeviceV1_0;
 use ash::vk;
 use winit::window::Window;
 
-use command::{CommandBuffer, CommandPool};
+use command::{CommandBuffers, CommandPool};
 use device::{Device, PhysicalDevice, Queue};
 use ext::{DebugUtils, Swapchain};
 use framebuffer::Framebuffer;
@@ -41,7 +41,7 @@ pub struct Renderer {
     in_flight_fences: Vec<sync::fence::Key>,
     render_finished_semaphores: Vec<sync::semaphore::Key>,
     image_available_semaphores: Vec<sync::semaphore::Key>,
-    command_buffers: Vec<command::buffer::Key>,
+    command_buffers: command::buffers::Key,
     command_pool: command::pool::Key,
     framebuffers: Vec<framebuffer::Key>,
     graphics_pipeline: pipeline::Key,
@@ -235,7 +235,7 @@ impl Renderer {
         };
 
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let slotmap_command_buffer = SlotMappable::slotmap().read().unwrap();
+        let slotmap_command_buffers = SlotMappable::slotmap().read().unwrap();
         let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
         let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
         let slotmap_framebuffer = SlotMappable::slotmap().read().unwrap();
@@ -250,10 +250,10 @@ impl Renderer {
             .get(graphics_pipeline)
             .expect("graphics pipeline not found");
         let device_ref: &Device = slotmap_device.get(device).expect("device not found");
-        for (index, command_buffer) in command_buffers.iter().enumerate() {
-            let command_buffer: &CommandBuffer = slotmap_command_buffer
-                .get(*command_buffer)
-                .expect("command buffer not found");
+        let command_buffer_objs: &CommandBuffers = slotmap_command_buffers
+            .get(command_buffers)
+            .expect("command buffers not found");
+        for (index, command_buffer) in command_buffer_objs.iter().enumerate() {
             let framebuffer: &Framebuffer = slotmap_framebuffer
                 .get(framebuffers[index])
                 .expect("framebuffer not found");
@@ -274,7 +274,7 @@ impl Renderer {
                         extent: swapchain_ref.extent(),
                     })
                     .clear_values(&clear_values);
-                render_pass_ref.begin(command_buffer, &begin_info, vk::SubpassContents::INLINE)?;
+                render_pass_ref.begin(&command_buffer, &begin_info, vk::SubpassContents::INLINE)?;
 
                 let command_buffer_handle = command_buffer.handle();
                 device_ref.loader().cmd_bind_pipeline(
@@ -287,7 +287,7 @@ impl Renderer {
                     .cmd_draw(**command_buffer_handle, 3, 1, 0, 0);
                 drop(command_buffer_handle);
 
-                render_pass_ref.end(command_buffer)?;
+                render_pass_ref.end(&command_buffer)?;
                 command_buffer.end()?;
             }
         }
@@ -381,10 +381,11 @@ impl Renderer {
                 )?
                 .0 as usize
         };
-        let slotmap_command_buffer = SlotMappable::slotmap().read().unwrap();
-        let command_buffer: &CommandBuffer = slotmap_command_buffer
-            .get(self.command_buffers[image_index])
+        let slotmap_command_buffers = SlotMappable::slotmap().read().unwrap();
+        let command_buffers: &CommandBuffers = slotmap_command_buffers
+            .get(self.command_buffers)
             .expect("command buffer not found");
+        let command_buffer = command_buffers.iter().nth(image_index).unwrap();
 
         if self.images_in_flight[image_index] != vk::Fence::null() {
             let fences = [self.images_in_flight[image_index]];
@@ -455,12 +456,12 @@ impl Drop for Renderer {
                 slotmap.remove(*semaphore);
             }
         }
-        unsafe {
-            let mut slotmap = SlotMappable::slotmap().write().unwrap();
-            let command_pool: &CommandPool = slotmap
-                .get(self.command_pool)
-                .expect("command pool not found");
-            command_pool.free_command_buffers(self.command_buffers.as_slice());
+        {
+            let mut slotmap = CommandBuffers::slotmap().write().unwrap();
+            slotmap.remove(self.command_buffers);
+        }
+        {
+            let mut slotmap = CommandPool::slotmap().write().unwrap();
             slotmap.remove(self.command_pool);
         }
         {

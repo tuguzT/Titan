@@ -9,7 +9,7 @@ use proc_macro::SlotMappable;
 use crate::error::Result;
 
 use super::super::{
-    command::{self, CommandBuffer},
+    command::{self, CommandBuffers},
     device::{self, Device},
     slotmap::{HasParent, SlotMappable},
     utils::{HasHandle, HasLoader},
@@ -58,7 +58,7 @@ impl CommandPool {
         Ok(key)
     }
 
-    pub fn allocate_command_buffers(&self, count: u32) -> Result<Vec<command::buffer::Key>> {
+    pub fn allocate_command_buffers(&self, count: u32) -> Result<command::buffers::Key> {
         let device_key = self.parent_key();
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
@@ -70,42 +70,9 @@ impl CommandPool {
             .command_buffer_count(count);
         let loader = device.loader();
         unsafe {
-            loader
-                .allocate_command_buffers(&allocate_info)?
-                .into_iter()
-                .map(|command_buffer| CommandBuffer::new(self.key, command_buffer))
-                .collect()
+            let handles = loader.allocate_command_buffers(&allocate_info)?;
+            CommandBuffers::new(&handles, self.key)
         }
-    }
-
-    pub unsafe fn free_command_buffers(&self, command_buffers: &[command::buffer::Key]) {
-        let device_key = self.parent_key();
-        let slotmap = SlotMappable::slotmap().read().unwrap();
-        let device: &Device = slotmap.get(device_key).expect("device not found");
-
-        {
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            let command_buffer_refs: Vec<_> = command_buffers
-                .iter()
-                .map(|key| {
-                    let command_buffer: &CommandBuffer =
-                        slotmap.get(*key).expect("command buffer not found");
-                    command_buffer.handle()
-                })
-                .collect();
-            let command_buffer_handles: Vec<_> =
-                command_buffer_refs.iter().map(|cb| ***cb).collect();
-
-            let handle = self.handle();
-            device
-                .loader()
-                .free_command_buffers(**handle, command_buffer_handles.as_slice());
-        }
-
-        let mut slotmap = <CommandBuffer as SlotMappable>::slotmap().write().unwrap();
-        command_buffers.iter().for_each(|key| {
-            slotmap.remove(*key);
-        });
     }
 }
 
