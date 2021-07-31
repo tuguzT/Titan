@@ -122,7 +122,7 @@ unsafe extern "system" fn callback(
         _ => unreachable!(),
     };
     log::log!(
-        target: "titan_engine::graphics::log",
+        target: "titan_engine::graphics::debug_utils",
         level,
         "{:?} [{} ({})] : {}",
         message_type,
