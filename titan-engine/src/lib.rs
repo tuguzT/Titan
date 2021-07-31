@@ -36,7 +36,10 @@ where
                 source: Some(error.into()),
             }),
     );
+    log::info!("window initialized successfully");
+
     let renderer = get_or_panic(Renderer::new(&config, window));
+    log::info!("renderer initialized successfully");
     let mut renderer = ManuallyDrop::new(renderer);
 
     event_loop.run(move |event, _, control_flow| {

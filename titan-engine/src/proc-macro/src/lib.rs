@@ -21,16 +21,16 @@ pub fn slot_mappable_macro_derive(input: TokenStream) -> TokenStream {
                         }
                     }
                 }
-                _ => panic!("struct must have a field annotated with `key` attribute"),
+                _ => panic!("struct must have a unique field annotated with `key` attribute"),
             },
             _ => panic!("macro applicable only for struct"),
         }
         if keys.len() > 1 {
-            panic!("there must be unique `key` attribute");
+            panic!("struct must have a UNIQUE field annotated with `key` attribute");
         }
         *keys
             .get(0)
-            .expect("struct must have a field annotated with `key` attribute")
+            .expect("struct must have a unique field annotated with `key` attribute")
     };
     let (key_ident, key_ty) = key;
 
