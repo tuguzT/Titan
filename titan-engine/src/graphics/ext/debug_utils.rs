@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::ffi::CStr;
 use std::ops::Deref;
 use std::os::raw::c_void;
@@ -56,12 +55,13 @@ impl DebugUtils {
         let slotmap = SlotMappable::slotmap().read().unwrap();
         let instance: &Instance = slotmap.get(instance_key).expect("instance not found");
 
+        let loader = instance.loader();
+        let loader = DebugUtilsLoader::new(loader.entry(), loader.instance());
+
         let messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
             .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
             .pfn_user_callback(Some(self::callback));
-        let loader = instance.loader();
-        let loader = DebugUtilsLoader::new(loader.entry(), loader.instance());
         let messenger =
             unsafe { loader.create_debug_utils_messenger(&messenger_create_info, None)? };
 
@@ -95,24 +95,20 @@ unsafe extern "system" fn callback(
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _user_data: *mut c_void,
 ) -> vk::Bool32 {
-    if p_callback_data.is_null() {
-        return vk::FALSE;
-    }
-
-    let callback_data = *p_callback_data;
-    let message_id_number = callback_data.message_id_number as i32;
-
-    let message_id_name = if callback_data.p_message_id_name.is_null() {
-        Cow::from("None")
-    } else {
-        CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+    let callback_data = match p_callback_data.as_ref() {
+        None => return vk::FALSE,
+        Some(data) => data,
     };
 
-    let message = if callback_data.p_message.is_null() {
-        Cow::from("None")
-    } else {
-        CStr::from_ptr(callback_data.p_message).to_string_lossy()
-    };
+    let message_id_number = callback_data.message_id_number;
+    let message_id_name = callback_data
+        .p_message_id_name
+        .as_ref()
+        .map_or("None", |ptr| CStr::from_ptr(ptr).to_str().unwrap());
+    let message = callback_data
+        .p_message
+        .as_ref()
+        .map_or("None", |ptr| CStr::from_ptr(ptr).to_str().unwrap());
 
     let level = match message_severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => Level::Trace,

@@ -71,7 +71,7 @@ where
             Event::LoopDestroyed => {
                 callback(MyEvent::Destroyed);
                 unsafe { ManuallyDrop::drop(&mut renderer) }
-                log::info!(target: "titan_engine::window", "closing this application");
+                log::info!("closing this application");
             }
             _ => (),
         }
