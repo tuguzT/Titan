@@ -22,6 +22,7 @@ pub mod view;
 
 #[derive(SlotMappable)]
 pub struct Image {
+    #[key]
     key: Key,
     handle: vk::Image,
     parent_device: device::Key,

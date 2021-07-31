@@ -19,6 +19,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct Fence {
+    #[key]
     key: Key,
     handle: vk::Fence,
     parent_device: device::Key,
@@ -42,7 +43,7 @@ impl Fence {
     pub fn new(device_key: device::Key, create_info: &vk::FenceCreateInfo) -> Result<Key> {
         let slotmap_device = SlotMappable::slotmap().read().unwrap();
         let device: &Device = slotmap_device.get(device_key).expect("device not found");
-        let handle = unsafe { device.loader().create_fence(&create_info, None)? };
+        let handle = unsafe { device.loader().create_fence(create_info, None)? };
 
         let mut slotmap = SlotMappable::slotmap().write().unwrap();
         let key = slotmap.insert_with_key(|key| Self {

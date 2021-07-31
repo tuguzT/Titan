@@ -22,6 +22,7 @@ type SurfaceLoader = ash::extensions::khr::Surface;
 
 #[derive(SlotMappable)]
 pub struct Surface {
+    #[key]
     key: Key,
     handle: vk::SurfaceKHR,
     loader: SurfaceLoader,

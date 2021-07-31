@@ -21,6 +21,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct CommandPool {
+    #[key]
     key: Key,
     handle: Mutex<vk::CommandPool>,
     parent_device: device::Key,

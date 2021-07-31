@@ -20,6 +20,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct ImageView {
+    #[key]
     key: Key,
     handle: vk::ImageView,
     parent_image: image::Key,

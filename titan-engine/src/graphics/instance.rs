@@ -51,6 +51,7 @@ impl Loader {
 
 #[derive(SlotMappable)]
 pub struct Instance {
+    #[key]
     key: Key,
     version: Version,
     layer_properties: Vec<vk::LayerProperties>,
@@ -101,7 +102,7 @@ impl Instance {
         // Setup application info for Vulkan API
         let application_name = CString::new(config.name()).unwrap();
         let engine_name = CString::new(ENGINE_NAME).unwrap();
-        let application_version = utils::to_vk_version(&config.version());
+        let application_version = utils::to_vk_version(config.version());
         let engine_version = utils::to_vk_version(&ENGINE_VERSION);
         let application_info = vk::ApplicationInfo::builder()
             .application_version(application_version)

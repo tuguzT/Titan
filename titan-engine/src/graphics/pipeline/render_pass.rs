@@ -21,6 +21,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct RenderPass {
+    #[key]
     key: Key,
     handle: vk::RenderPass,
     parent_swapchain: swapchain::Key,
@@ -114,7 +115,7 @@ impl RenderPass {
         let loader = device.loader();
         let handle = command_buffer.handle();
 
-        loader.cmd_begin_render_pass(**handle, &begin_info, contents);
+        loader.cmd_begin_render_pass(**handle, begin_info, contents);
         Ok(())
     }
 

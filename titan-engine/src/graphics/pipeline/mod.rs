@@ -26,6 +26,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct GraphicsPipeline {
+    #[key]
     key: Key,
     handle: vk::Pipeline,
     parent_render_pass: render_pass::Key,

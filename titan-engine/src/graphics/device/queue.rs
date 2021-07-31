@@ -20,6 +20,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct Queue {
+    #[key]
     key: Key,
     family_index: u32,
     handle: Mutex<vk::Queue>,

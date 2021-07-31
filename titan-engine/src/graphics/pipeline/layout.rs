@@ -19,6 +19,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct PipelineLayout {
+    #[key]
     key: Key,
     handle: vk::PipelineLayout,
     parent_device: device::Key,

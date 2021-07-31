@@ -19,6 +19,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct Framebuffer {
+    #[key]
     key: Key,
     handle: vk::Framebuffer,
     parent_device: device::Key,

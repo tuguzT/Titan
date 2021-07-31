@@ -24,6 +24,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct Swapchain {
+    #[key]
     key: Key,
     handle: vk::SwapchainKHR,
     format: vk::SurfaceFormatKHR,

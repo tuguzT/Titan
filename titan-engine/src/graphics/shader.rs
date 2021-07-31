@@ -22,6 +22,7 @@ pub const FRAG_SHADER_CODE: &[u8] = include_bytes!("../../res/shaders/output/fra
 
 #[derive(SlotMappable)]
 pub struct ShaderModule {
+    #[key]
     key: Key,
     handle: vk::ShaderModule,
     code: Box<[u32]>,

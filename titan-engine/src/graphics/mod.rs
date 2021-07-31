@@ -113,7 +113,7 @@ impl Renderer {
                     })
                     .collect::<Result<Vec<_>>>()?;
                 for key in physical_devices.iter() {
-                    if !retain.contains(&key) {
+                    if !retain.contains(key) {
                         slotmap.remove(*key);
                     }
                 }

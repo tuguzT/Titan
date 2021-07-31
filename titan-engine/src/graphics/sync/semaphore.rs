@@ -19,6 +19,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct Semaphore {
+    #[key]
     key: Key,
     handle: vk::Semaphore,
     parent_device: device::Key,

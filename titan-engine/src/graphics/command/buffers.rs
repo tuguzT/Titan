@@ -21,6 +21,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct CommandBuffers {
+    #[key]
     key: Key,
     handles: Vec<Mutex<vk::CommandBuffer>>,
     parent_command_pool: command::pool::Key,
@@ -48,7 +49,7 @@ impl CommandBuffers {
 
     pub fn iter(&self) -> impl Iterator<Item = CommandBuffer> {
         CommandBufferIterator {
-            command_buffers: &self,
+            command_buffers: self,
             index: 0,
         }
     }
@@ -71,7 +72,7 @@ impl<'a> Iterator for CommandBufferIterator<'a> {
         self.command_buffers.handles.get(index).map(|_| {
             self.index += 1;
             CommandBuffer {
-                parent: &self.command_buffers,
+                parent: self.command_buffers,
                 index,
             }
         })

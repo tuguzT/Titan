@@ -22,6 +22,7 @@ slotmap::new_key_type! {
 
 #[derive(SlotMappable)]
 pub struct DebugUtils {
+    #[key]
     key: Key,
     loader: DebugUtilsLoader,
     messenger: vk::DebugUtilsMessengerEXT,

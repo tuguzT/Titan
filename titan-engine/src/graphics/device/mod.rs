@@ -59,6 +59,7 @@ impl Deref for Loader {
 
 #[derive(SlotMappable)]
 pub struct Device {
+    #[key]
     key: Key,
     loader: Mutex<Loader>,
     queue_create_infos: Vec<QueueInfo>,
