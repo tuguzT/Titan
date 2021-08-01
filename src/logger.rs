@@ -10,7 +10,7 @@ use log4rs::Handle;
 
 pub fn init() -> Result<Handle, impl Error> {
     let encoder = Box::new(PatternEncoder::new(
-        "{d:<35} {l:<5} [thread \"{T}\" id {I}] {t} >> {m}{n}",
+        "{d:<35} [thread \"{T}\" id {({I}]):<6} {l:<5} {t} >> {m}{n}",
     ));
 
     let stdout = ConsoleAppender::builder().encoder(encoder.clone()).build();
