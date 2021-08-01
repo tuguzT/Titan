@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
+use ash::Device as DeviceLoader;
 use owning_ref::MutexGuardRef;
 
 pub use physical::PhysicalDevice;
@@ -39,7 +40,7 @@ struct QueueInfo {
 }
 
 pub struct Loader {
-    loader: ash::Device,
+    loader: DeviceLoader,
     handle: vk::Device,
 }
 
@@ -50,7 +51,7 @@ impl Loader {
 }
 
 impl Deref for Loader {
-    type Target = ash::Device;
+    type Target = DeviceLoader;
 
     fn deref(&self) -> &Self::Target {
         &self.loader

@@ -131,8 +131,8 @@ impl PhysicalDevice {
         flags: vk::QueueFlags,
     ) -> impl Iterator<Item = (usize, &vk::QueueFamilyProperties)> {
         self.queue_family_properties.iter().enumerate().filter(
-            move |(_index, queue_family_properties)| {
-                let inner_flags = &queue_family_properties.queue_flags;
+            move |(_, queue_family_properties)| {
+                let inner_flags = queue_family_properties.queue_flags;
                 inner_flags.contains(flags)
             },
         )

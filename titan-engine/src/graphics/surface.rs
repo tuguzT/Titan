@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use ash::extensions::khr::Surface as SurfaceLoader;
 use ash::vk;
 use winit::window::Window;
 
@@ -17,8 +18,6 @@ use super::{
 slotmap::new_key_type! {
     pub struct Key;
 }
-
-type SurfaceLoader = ash::extensions::khr::Surface;
 
 #[derive(SlotMappable)]
 pub struct Surface {
