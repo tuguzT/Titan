@@ -68,6 +68,7 @@ where
                 }
                 if let Err(error) = renderer.render() {
                     log::error!("{}", error);
+                    log::info!("exit event sent due to previous error");
                     *control_flow = ControlFlow::Exit;
                 }
             }
