@@ -1,7 +1,6 @@
 use std::ops::Deref;
 use std::sync::Mutex;
 
-use ash::version::DeviceV1_0;
 use ash::vk;
 
 use proc_macro::SlotMappable;

@@ -4,7 +4,6 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 
-use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 use ash::Device as DeviceLoader;
 use owning_ref::MutexGuardRef;

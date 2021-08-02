@@ -3,7 +3,6 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 
-use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use owning_ref::MutexGuardRef;
 use semver::Version;

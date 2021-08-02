@@ -3,8 +3,6 @@ use std::ffi::CStr;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
 
-use ash::prelude::VkResult;
-use ash::version::InstanceV1_0;
 use ash::vk;
 use owning_ref::MutexGuardRef;
 
@@ -71,8 +69,9 @@ impl PhysicalDevice {
         let queue_family_properties = instance_loader
             .instance()
             .get_physical_device_queue_family_properties(handle);
-        let layer_properties =
-            enumerate_device_layer_properties(instance_loader.instance(), handle)?;
+        let layer_properties = instance_loader
+            .instance()
+            .enumerate_device_layer_properties(handle)?;
         let extension_properties = instance_loader
             .instance()
             .enumerate_device_extension_properties(handle)?;
@@ -194,23 +193,4 @@ impl Ord for PhysicalDevice {
     fn cmp(&self, other: &Self) -> Ordering {
         self.score().cmp(&other.score())
     }
-}
-
-unsafe fn enumerate_device_layer_properties(
-    instance: &ash::Instance,
-    physical_device: vk::PhysicalDevice,
-) -> VkResult<Vec<vk::LayerProperties>> {
-    let mut count = 0;
-    instance
-        .fp_v1_0()
-        .enumerate_device_layer_properties(physical_device, &mut count, std::ptr::null_mut())
-        .result()?;
-    let mut data = Vec::with_capacity(count as usize);
-    let err_code = instance.fp_v1_0().enumerate_device_layer_properties(
-        physical_device,
-        &mut count,
-        data.as_mut_ptr(),
-    );
-    data.set_len(count as usize);
-    err_code.result_with_success(data)
 }

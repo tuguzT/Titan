@@ -17,10 +17,9 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    #[allow(deprecated)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Graphics { result } => write!(f, "{:?}: {}", result, result.description()),
+            Self::Graphics { result } => write!(f, "{:?}: {}", result, result),
             Self::Other { message, .. } => write!(f, "{}", message),
         }
     }
@@ -29,8 +28,8 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            Self::Graphics { result: code } => Some(code),
-            Self::Other { source, .. } => source.as_ref().map(|error| error.as_ref()),
+            Self::Graphics { result } => Some(result),
+            Self::Other { source, .. } => source.as_ref().map(Box::as_ref),
         }
     }
 }
