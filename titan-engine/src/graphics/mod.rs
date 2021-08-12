@@ -1,527 +1,380 @@
-use ash::vk;
-use winit::window::Window;
+use std::collections::HashSet;
+use std::sync::Arc;
 
-use command::{CommandBuffers, CommandPool};
-use device::{Device, PhysicalDevice, Queue};
-use ext::{DebugUtils, Swapchain};
-use framebuffer::Framebuffer;
-use image::{Image, ImageView};
-use instance::Instance;
-use pipeline::{GraphicsPipeline, PipelineLayout, RenderPass};
-use surface::Surface;
-use sync::{Fence, Semaphore};
-use utils::{HasHandle, HasLoader};
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
+    SubpassContents,
+};
+use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
+use vulkano::device::{Device, DeviceExtensions, Features, Queue};
+use vulkano::format::Format;
+use vulkano::image::view::ImageView;
+use vulkano::image::{ImageUsage, SwapchainImage};
+use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
+use vulkano::instance::{ApplicationInfo, Instance};
+use vulkano::pipeline::vertex::{BufferlessDefinition, BufferlessVertices};
+use vulkano::pipeline::viewport::Viewport;
+use vulkano::pipeline::GraphicsPipeline;
+use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
+use vulkano::swapchain;
+use vulkano::swapchain::{ColorSpace, PresentMode, Surface, Swapchain};
+use vulkano::sync::{GpuFuture, SharingMode};
+use vulkano_win::VkSurfaceBuild;
+use winit::dpi::LogicalSize;
+use winit::event_loop::EventLoop;
+use winit::window::{Window, WindowBuilder};
 
 use crate::{
-    config::Config,
+    config::{Config, ENGINE_NAME, ENGINE_VERSION},
     error::{Error, Result},
 };
 
-use self::slotmap::SlotMappable;
-
-mod command;
-mod device;
-mod ext;
-mod framebuffer;
-mod image;
-mod instance;
-mod pipeline;
+mod debug_callback;
 mod shader;
-mod slotmap;
-mod surface;
-mod sync;
 mod utils;
 
-const MAX_FRAMES_IN_FLIGHT: usize = 10;
+type SwapchainFramebuffer = Framebuffer<((), Arc<ImageView<Arc<SwapchainImage<Window>>>>)>;
 
 pub struct Renderer {
-    frame_index: usize,
-    images_in_flight: Vec<vk::Fence>,
-    in_flight_fences: Vec<sync::fence::Key>,
-    render_finished_semaphores: Vec<sync::semaphore::Key>,
-    image_available_semaphores: Vec<sync::semaphore::Key>,
-    command_buffers: command::buffers::Key,
-    command_pool: command::pool::Key,
-    framebuffers: Vec<framebuffer::Key>,
-    graphics_pipeline: pipeline::Key,
-    pipeline_layout: pipeline::layout::Key,
-    render_pass: pipeline::render_pass::Key,
-    swapchain_image_views: Vec<image::view::Key>,
-    swapchain_images: Vec<image::Key>,
-    swapchain: ext::swapchain::Key,
-    device_queues: Vec<device::queue::Key>,
-    device: device::Key,
-    physical_device: device::physical::Key,
-    surface: surface::Key,
-    debug_utils: Option<ext::debug_utils::Key>,
-    instance: instance::Key,
-
-    window: Window,
+    command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>>,
+    framebuffers: Vec<Arc<SwapchainFramebuffer>>,
+    graphics_pipeline: Arc<GraphicsPipeline<BufferlessDefinition>>,
+    render_pass: Arc<RenderPass>,
+    swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
+    swapchain: Arc<Swapchain<Window>>,
+    graphics_queue: Arc<Queue>,
+    present_queue: Arc<Queue>,
+    device: Arc<Device>,
+    surface: Arc<Surface<Window>>,
+    debug_callback: Option<DebugCallback>,
+    instance: Arc<Instance>,
 }
 
 impl Renderer {
-    pub fn new(config: &Config, window: Window) -> Result<Self> {
-        let instance = {
-            let key = Instance::new(config, &window)?;
-            let slotmap = SlotMappable::slotmap().write().unwrap();
-            let instance: &Instance = slotmap.get(key).unwrap();
-            log::info!("version of Vulkan instance is {}", instance.version());
-            key
-        };
+    pub fn new(config: &Config, event_loop: &EventLoop<()>) -> Result<Self> {
+        const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
-        let debug_utils = if instance::ENABLE_VALIDATION {
-            let key = DebugUtils::new(instance)?;
-            log::info!("debug_utils extension was attached to the instance");
-            Some(key)
+        let instance = {
+            let info = ApplicationInfo {
+                application_name: Some(config.name().into()),
+                application_version: Some(utils::to_vk_version(config.version())),
+                engine_name: Some(ENGINE_NAME.into()),
+                engine_version: Some(utils::to_vk_version(&*ENGINE_VERSION)),
+            };
+            let extensions = {
+                let mut extensions = vulkano_win::required_extensions();
+                if ENABLE_VALIDATION {
+                    extensions.ext_debug_utils = true;
+                }
+                extensions
+            };
+            let layers = ENABLE_VALIDATION.then(|| "VK_LAYER_KHRONOS_validation");
+            Instance::new(Some(&info), vulkano::Version::V1_2, &extensions, layers)
+                .map_err(|err| Error::new("instance creation failure", err))
+        }?;
+        log::info!(
+            "max version of Vulkan instance is {}",
+            instance.max_api_version(),
+        );
+
+        let debug_callback = if ENABLE_VALIDATION {
+            let debug_callback = DebugCallback::new(
+                &instance,
+                MessageSeverity {
+                    error: true,
+                    warning: true,
+                    information: true,
+                    verbose: true,
+                },
+                MessageType::all(),
+                debug_callback::callback,
+            )
+            .map_err(|err| Error::new("debug callback creation failure", err))?;
+            log::info!("debug callback was attached to the instance");
+            Some(debug_callback)
         } else {
             None
         };
-        let surface = Surface::new(instance, &window)?;
 
-        let physical_device = {
-            let physical_devices: Vec<_> = {
-                let slotmap = SlotMappable::slotmap().read().unwrap();
-                let surface: &Surface = slotmap.get(surface).expect("surface not found");
-                let slotmap = SlotMappable::slotmap().read().unwrap();
-                let instance: &Instance = slotmap.get(instance).expect("instance not found");
+        let surface = WindowBuilder::new()
+            .with_title(config.name())
+            .with_min_inner_size(LogicalSize::new(250, 100))
+            .with_visible(false)
+            .build_vk_surface(event_loop, instance.clone())
+            .map_err(|err| Error::new("surface creation failure", err))?;
+        log::info!("window & surface initialized successfully");
 
-                let physical_devices = instance.enumerate_physical_devices()?;
-                let mut slotmap = SlotMappable::slotmap().write().unwrap();
-                let retain = physical_devices
-                    .iter()
-                    .filter_map(|&key| {
-                        let physical_device: &PhysicalDevice =
-                            slotmap.get(key).expect("physical device not found");
-                        if !physical_device.is_suitable() {
-                            return None;
-                        }
+        let physical_devices = PhysicalDevice::enumerate(&instance);
+        log::info!("enumerated {} physical devices", physical_devices.len());
 
-                        match surface.is_suitable(physical_device) {
-                            Ok(false) => return None,
-                            Err(err) => return Some(Err(err)),
-                            _ => (),
-                        };
-
-                        let family_properties_support = surface
-                            .physical_device_queue_family_properties_support(physical_device);
-                        match family_properties_support {
-                            Ok(vec) if vec.first().is_some() => Some(Ok(key)),
-                            Err(err) => Some(Err(err)),
-                            _ => None,
-                        }
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                for key in physical_devices.iter() {
-                    if !retain.contains(key) {
-                        slotmap.remove(*key);
+        let required_extensions = DeviceExtensions {
+            khr_swapchain: true,
+            ..DeviceExtensions::none()
+        };
+        let required_features = Features::none();
+        let (physical_device, graphics_family, present_family) = physical_devices
+            .filter(|device: &PhysicalDevice| {
+                let extensions = device.supported_extensions();
+                // All required extensions are supported by device
+                required_extensions.intersection(extensions) == required_extensions
+            })
+            .filter_map(|device| {
+                let graphics_family = device
+                    .queue_families()
+                    .find(|&queue| queue.supports_graphics());
+                let present_family = device
+                    .queue_families()
+                    .find(|&queue| surface.is_supported(queue).unwrap_or(false));
+                match (graphics_family, present_family) {
+                    (Some(graphics_family), Some(present_family)) => {
+                        Some((device, graphics_family, present_family))
                     }
+                    _ => None,
                 }
-                retain
-            };
-            log::info!(
-                "enumerated {} suitable physical devices",
-                physical_devices.len(),
-            );
-            let mut slotmap = PhysicalDevice::slotmap().write().unwrap();
-            let best_physical_device = *physical_devices
-                .iter()
-                .max_by_key(|&&key| slotmap.get(key))
-                .ok_or_else(|| Error::Other {
-                    message: String::from("no suitable physical devices were found"),
-                    source: None,
-                })?;
-            for &physical_device in physical_devices.iter() {
-                if physical_device != best_physical_device {
-                    slotmap.remove(physical_device);
-                }
-            }
-            best_physical_device
-        };
-
-        let device = Device::new(surface, physical_device)?;
-        let device_queues = {
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            let device: &Device = slotmap.get(device).expect("device not found");
-            device.enumerate_queues()?
-        };
-
-        let swapchain = Swapchain::new(&window, device, surface)?;
-        let swapchain_images = {
-            let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
-            let swapchain: &Swapchain = slotmap_swapchain
-                .get(swapchain)
-                .expect("swapchain not found");
-            swapchain.enumerate_images()?
-        };
-        let swapchain_image_views = {
-            let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
-            let swapchain: &Swapchain = slotmap_swapchain
-                .get(swapchain)
-                .expect("swapchain not found");
-            let slotmap_image = SlotMappable::slotmap().read().unwrap();
-            swapchain_images
-                .iter()
-                .map(|&image_key| unsafe {
-                    let image: &Image = slotmap_image.get(image_key).expect("image not found");
-                    let create_info = vk::ImageViewCreateInfo::builder()
-                        .image(**image.handle())
-                        .view_type(vk::ImageViewType::TYPE_2D)
-                        .format(swapchain.format().format)
-                        .components(vk::ComponentMapping {
-                            r: vk::ComponentSwizzle::IDENTITY,
-                            g: vk::ComponentSwizzle::IDENTITY,
-                            b: vk::ComponentSwizzle::IDENTITY,
-                            a: vk::ComponentSwizzle::IDENTITY,
-                        })
-                        .subresource_range(vk::ImageSubresourceRange {
-                            aspect_mask: vk::ImageAspectFlags::COLOR,
-                            base_mip_level: 0,
-                            level_count: 1,
-                            base_array_layer: 0,
-                            layer_count: 1,
-                        });
-                    ImageView::new(image_key, &create_info)
-                })
-                .collect::<Result<Vec<_>>>()?
-        };
-
-        let render_pass = RenderPass::new(swapchain)?;
-        let pipeline_layout = PipelineLayout::new(device)?;
-        let graphics_pipeline = GraphicsPipeline::new(render_pass, pipeline_layout)?;
-
-        let framebuffers = {
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            let render_pass: &RenderPass = slotmap.get(render_pass).expect("render pass not found");
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            let swapchain: &Swapchain = slotmap.get(swapchain).expect("swapchain not found");
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            swapchain_image_views
-                .iter()
-                .map(|&image_view| unsafe {
-                    let image_view: &ImageView =
-                        slotmap.get(image_view).expect("image view not found");
-                    let attachments = [image_view.handle()];
-                    let attachments: Vec<_> = attachments.iter().map(|handle| ***handle).collect();
-                    let create_info = vk::FramebufferCreateInfo::builder()
-                        .attachments(&attachments)
-                        .render_pass(**render_pass.handle())
-                        .width(swapchain.extent().width)
-                        .height(swapchain.extent().height)
-                        .layers(1);
-                    Framebuffer::new(device, &create_info)
-                })
-                .collect::<Result<Vec<_>>>()?
-        };
-
-        let command_pool = unsafe {
-            let graphics_queue_family_index = {
-                let slotmap = SlotMappable::slotmap().read().unwrap();
-                let physical_device: &PhysicalDevice = slotmap
-                    .get(physical_device)
-                    .expect("physical device not found");
-                physical_device.graphics_family_index().unwrap()
-            };
-            let command_pool_create_info = vk::CommandPoolCreateInfo::builder()
-                .queue_family_index(graphics_queue_family_index);
-            CommandPool::new(device, &command_pool_create_info)?
-        };
-        let command_buffers = {
-            let slotmap_command_pool = SlotMappable::slotmap().read().unwrap();
-            let command_pool: &CommandPool = slotmap_command_pool
-                .get(command_pool)
-                .expect("command pool not found");
-            command_pool.allocate_command_buffers(swapchain_image_views.len() as u32)?
-        };
-
-        let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let slotmap_command_buffers = SlotMappable::slotmap().read().unwrap();
-        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
-        let slotmap_render_pass = SlotMappable::slotmap().read().unwrap();
-        let slotmap_framebuffer = SlotMappable::slotmap().read().unwrap();
-        let slotmap_graphics_pipeline = SlotMappable::slotmap().read().unwrap();
-        let render_pass_ref: &RenderPass = slotmap_render_pass
-            .get(render_pass)
-            .expect("render pass not found");
-        let swapchain_ref: &Swapchain = slotmap_swapchain
-            .get(swapchain)
-            .expect("swapchain not found");
-        let graphics_pipeline_ref: &GraphicsPipeline = slotmap_graphics_pipeline
-            .get(graphics_pipeline)
-            .expect("graphics pipeline not found");
-        let device_ref: &Device = slotmap_device.get(device).expect("device not found");
-        let command_buffer_objs: &CommandBuffers = slotmap_command_buffers
-            .get(command_buffers)
-            .expect("command buffers not found");
-        for (index, command_buffer) in command_buffer_objs.iter().enumerate() {
-            let framebuffer: &Framebuffer = slotmap_framebuffer
-                .get(framebuffers[index])
-                .expect("framebuffer not found");
-            let begin_info = vk::CommandBufferBeginInfo::builder();
-            unsafe {
-                command_buffer.begin(&begin_info)?;
-                let clear_color = vk::ClearValue {
-                    color: vk::ClearColorValue {
-                        float32: [0.0, 0.0, 0.0, 1.0],
-                    },
+            })
+            .max_by_key(|(device, _, _)| {
+                let mut score = match device.properties().device_type {
+                    PhysicalDeviceType::DiscreteGpu => 10000,
+                    PhysicalDeviceType::IntegratedGpu => 1000,
+                    PhysicalDeviceType::VirtualGpu => 100,
+                    PhysicalDeviceType::Cpu => 10,
+                    PhysicalDeviceType::Other => 0,
                 };
-                let clear_values = [clear_color];
-                let begin_info = vk::RenderPassBeginInfo::builder()
-                    .render_pass(**render_pass_ref.handle())
-                    .framebuffer(**framebuffer.handle())
-                    .render_area(vk::Rect2D {
-                        offset: Default::default(),
-                        extent: swapchain_ref.extent(),
-                    })
-                    .clear_values(&clear_values);
-                render_pass_ref.begin(&command_buffer, &begin_info, vk::SubpassContents::INLINE)?;
+                score += device.properties().max_image_dimension2_d;
+                score
+            })
+            .ok_or_else(|| Error::from("no suitable physical device were found"))?;
+        log::info!(
+            r#"using device "{}" (type "{:?}")"#,
+            physical_device.properties().device_name,
+            physical_device.properties().device_type,
+        );
 
-                let command_buffer_handle = command_buffer.handle();
-                device_ref.loader().cmd_bind_pipeline(
-                    **command_buffer_handle,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    **graphics_pipeline_ref.handle(),
-                );
-                device_ref
-                    .loader()
-                    .cmd_draw(**command_buffer_handle, 3, 1, 0, 0);
-                drop(command_buffer_handle);
-
-                render_pass_ref.end(&command_buffer)?;
-                command_buffer.end()?;
-            }
-        }
-
-        let create_semaphores = || {
-            (0..MAX_FRAMES_IN_FLIGHT)
-                .into_iter()
-                .map(|_| Semaphore::new(device))
-                .collect::<Result<Vec<_>>>()
+        let (device, mut queues) = {
+            let priorities = 1.0;
+            let unique_queue_families = {
+                let unique_queue_families: HashSet<_> = [graphics_family.id(), present_family.id()]
+                    .iter()
+                    .cloned()
+                    .collect();
+                unique_queue_families.into_iter().map(|family| {
+                    (
+                        physical_device.queue_family_by_id(family).unwrap(),
+                        priorities,
+                    )
+                })
+            };
+            Device::new(
+                physical_device,
+                &required_features,
+                &physical_device
+                    .required_extensions()
+                    .union(&required_extensions),
+                unique_queue_families,
+            )
+            .map_err(|err| Error::new("device creation failure", err))?
         };
-        let image_available_semaphores = create_semaphores()?;
-        let render_finished_semaphores = create_semaphores()?;
-        let fence_create_info =
-            vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
-        let in_flight_fences = (0..MAX_FRAMES_IN_FLIGHT)
-            .into_iter()
-            .map(|_| Fence::new(device, &fence_create_info))
+        let graphics_queue = queues.next().unwrap();
+        let present_queue = queues.next().unwrap_or_else(|| graphics_queue.clone());
+
+        let (swapchain, swapchain_images) = {
+            let caps = surface
+                .capabilities(physical_device)
+                .map_err(|err| Error::new("failed to get surface capabilities", err))?;
+            let (format, color_space) = {
+                let formats = caps.supported_formats;
+                *formats
+                    .iter()
+                    .find(|(format, color_space)| {
+                        *format == Format::B8G8R8A8Unorm
+                            && *color_space == ColorSpace::SrgbNonLinear
+                    })
+                    .unwrap_or_else(|| &formats[0])
+            };
+            let present_mode = caps
+                .present_modes
+                .iter()
+                .find(|&mode| mode == PresentMode::Mailbox)
+                .unwrap_or(PresentMode::Fifo);
+            let dimensions = if let Some(current_extent) = caps.current_extent {
+                current_extent
+            } else {
+                let window_size = surface.window().inner_size();
+                [
+                    window_size
+                        .width
+                        .clamp(caps.min_image_extent[0], caps.max_image_extent[0]),
+                    window_size
+                        .height
+                        .clamp(caps.min_image_extent[1], caps.max_image_extent[1]),
+                ]
+            };
+            let image_count = {
+                let mut image_count = caps.min_image_count + 1;
+                if caps.max_image_count.is_some() && image_count > caps.max_image_count.unwrap() {
+                    image_count = caps.max_image_count.unwrap();
+                }
+                image_count
+            };
+            let sharing_mode: SharingMode = if graphics_family != present_family {
+                vec![&graphics_queue, &present_queue].as_slice().into()
+            } else {
+                (&graphics_queue).into()
+            };
+            Swapchain::start(device.clone(), surface.clone())
+                .format(format)
+                .color_space(color_space)
+                .present_mode(present_mode)
+                .dimensions(dimensions)
+                .num_images(image_count)
+                .transform(caps.current_transform)
+                .sharing_mode(sharing_mode)
+                .usage(ImageUsage::color_attachment())
+                .build()
+                .map_err(|err| Error::new("swapchain creation failure", err))?
+        };
+
+        let render_pass = Arc::new(
+            vulkano::single_pass_renderpass! {
+                device.clone(),
+                attachments: {
+                    color: {
+                        load: Clear,
+                        store: Store,
+                        format: swapchain.format(),
+                        samples: 1,
+                    }
+                },
+                pass: {
+                    color: [color],
+                    depth_stencil: {}
+                }
+            }
+            .map_err(|err| Error::new("render pass creation failure", err))?,
+        );
+
+        use self::shader::default as shader;
+        let vert_shader_module = shader::vertex::Shader::load(device.clone())
+            .map_err(|err| Error::new("vertex shader module creation failure", err))?;
+        let frag_shader_module = shader::fragment::Shader::load(device.clone())
+            .map_err(|err| Error::new("fragment shader module creation failure", err))?;
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: {
+                let dimensions = swapchain.dimensions();
+                [dimensions[0] as f32, dimensions[1] as f32]
+            },
+            depth_range: 0.0..1.0,
+        };
+        let graphics_pipeline = Arc::new(
+            GraphicsPipeline::start()
+                .vertex_input(BufferlessDefinition {})
+                .vertex_shader(vert_shader_module.main_entry_point(), ())
+                .fragment_shader(frag_shader_module.main_entry_point(), ())
+                .triangle_list()
+                .primitive_restart(false)
+                .viewports(vec![viewport])
+                .depth_clamp(false)
+                .cull_mode_back()
+                .front_face_clockwise()
+                .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+                .build(device.clone())
+                .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
+        );
+
+        let framebuffers = swapchain_images
+            .iter()
+            .map(|image| {
+                let image_view = ImageView::new(image.clone())
+                    .map_err(|err| Error::new("image view creation failure", err))?;
+                let framebuffer = Framebuffer::start(render_pass.clone())
+                    .add(image_view)
+                    .map_err(|err| Error::new("failed to add an attachment to framebuffer", err))?
+                    .build()
+                    .map_err(|err| Error::new("framebuffer creation failure", err))?;
+                Ok(Arc::new(framebuffer))
+            })
             .collect::<Result<Vec<_>>>()?;
 
+        let command_buffers = {
+            let queue_family = graphics_queue.family();
+            let vertices = BufferlessVertices {
+                vertices: 3,
+                instances: 1,
+            };
+            let clear_values = vec![[0.0, 0.0, 0.0, 1.0].into()];
+            framebuffers
+                .iter()
+                .map(|framebuffer| {
+                    let mut builder = AutoCommandBufferBuilder::primary(
+                        device.clone(),
+                        queue_family,
+                        CommandBufferUsage::MultipleSubmit,
+                    )
+                    .map_err(|err| Error::new("command buffer creation failure", err))?;
+                    builder
+                        .begin_render_pass(
+                            framebuffer.clone(),
+                            SubpassContents::Inline,
+                            clear_values.clone(),
+                        )
+                        .map_err(|err| Error::new("begin render pass failure", err))?
+                        .draw(
+                            graphics_pipeline.clone(),
+                            &DynamicState::none(),
+                            vertices,
+                            (),
+                            (),
+                        )
+                        .map_err(|err| Error::new("draw command failure", err))?
+                        .end_render_pass()
+                        .map_err(|err| Error::new("end render pass failure", err))?;
+                    let command_buffer = builder
+                        .build()
+                        .map_err(|err| Error::new("command buffer creation failure", err))?;
+                    Ok(Arc::new(command_buffer))
+                })
+                .collect::<Result<Vec<_>>>()?
+        };
+
         Ok(Self {
-            window,
             instance,
-            debug_utils,
+            debug_callback,
             surface,
-            physical_device,
             device,
-            device_queues,
+            graphics_queue,
+            present_queue,
             swapchain,
             swapchain_images,
-            swapchain_image_views,
             render_pass,
-            pipeline_layout,
             graphics_pipeline,
             framebuffers,
-            command_pool,
             command_buffers,
-            image_available_semaphores,
-            render_finished_semaphores,
-            in_flight_fences,
-            images_in_flight: vec![vk::Fence::null(); MAX_FRAMES_IN_FLIGHT],
-            frame_index: 0,
         })
     }
 
     pub fn window(&self) -> &Window {
-        &self.window
+        self.surface.window()
     }
 
     pub fn render(&mut self) -> Result<()> {
-        let slotmap_fence = SlotMappable::slotmap().read().unwrap();
-        let in_flight_fence: &Fence = slotmap_fence
-            .get(self.in_flight_fences[self.frame_index])
-            .expect("fence not found");
+        let (image_index, _suboptimal, acquire_future) =
+            swapchain::acquire_next_image(self.swapchain.clone(), None)
+                .map_err(|err| Error::new("failed to acquire next image", err))?;
+        let command_buffer = self.command_buffers[image_index].clone();
 
-        let slotmap_device = SlotMappable::slotmap().read().unwrap();
-        let device: &Device = slotmap_device.get(self.device).expect("device not found");
-
-        let slotmap_swapchain = SlotMappable::slotmap().read().unwrap();
-        let swapchain: &Swapchain = slotmap_swapchain
-            .get(self.swapchain)
-            .expect("swapchain not found");
-
-        let slotmap_semaphore = SlotMappable::slotmap().read().unwrap();
-        let image_available_semaphore: &Semaphore = slotmap_semaphore
-            .get(self.image_available_semaphores[self.frame_index])
-            .expect("semaphore not found");
-        let render_finished_semaphore: &Semaphore = slotmap_semaphore
-            .get(self.render_finished_semaphores[self.frame_index])
-            .expect("semaphore not found");
-
-        let slotmap_queue = SlotMappable::slotmap().read().unwrap();
-        let queue: &Queue = slotmap_queue
-            .get(self.device_queues[0])
-            .expect("queue not found");
-        let queue_handle = queue.handle();
-
-        unsafe {
-            let fences = [**in_flight_fence.handle()];
-            device.loader().wait_for_fences(&fences, true, u64::MAX)?;
-        }
-
-        let image_index = unsafe {
-            let handle = swapchain.handle();
-            swapchain
-                .loader()
-                .acquire_next_image(
-                    **handle,
-                    u64::MAX,
-                    **image_available_semaphore.handle(),
-                    vk::Fence::null(),
-                )?
-                .0 as usize
-        };
-        let slotmap_command_buffers = SlotMappable::slotmap().read().unwrap();
-        let command_buffers: &CommandBuffers = slotmap_command_buffers
-            .get(self.command_buffers)
-            .expect("command buffer not found");
-        let command_buffer = command_buffers.iter().nth(image_index).unwrap();
-
-        if self.images_in_flight[image_index] != vk::Fence::null() {
-            let fences = [self.images_in_flight[image_index]];
-            unsafe {
-                device.loader().wait_for_fences(&fences, true, u64::MAX)?;
-            }
-        }
-        self.images_in_flight[image_index] = **in_flight_fence.handle();
-
-        let wait_semaphores = [**image_available_semaphore.handle()];
-        let signal_semaphores = [**render_finished_semaphore.handle()];
-        let command_buffers = [command_buffer.handle()];
-        let command_buffers: Vec<_> = command_buffers.iter().map(|cb| ***cb).collect();
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_semaphores(&wait_semaphores)
-            .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .command_buffers(command_buffers.as_slice())
-            .signal_semaphores(&signal_semaphores);
-        let submits = [*submit_info];
-        unsafe {
-            let fences = [**in_flight_fence.handle()];
-            device.loader().reset_fences(&fences)?;
-            device
-                .loader()
-                .queue_submit(**queue_handle, &submits, **in_flight_fence.handle())?;
-        }
-        let swapchains = [swapchain.handle()];
-        let swapchains: Vec<_> = swapchains.iter().map(|handle| ***handle).collect();
-        let image_indices = [image_index as u32];
-        let present_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(&signal_semaphores)
-            .swapchains(&swapchains)
-            .image_indices(&image_indices);
-        unsafe {
-            swapchain
-                .loader()
-                .queue_present(**queue_handle, &present_info)?;
-        }
-        self.frame_index = (self.frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
-        Ok(())
-    }
-
-    pub fn wait(&mut self) -> Result<()> {
-        unsafe {
-            let slotmap = SlotMappable::slotmap().read().unwrap();
-            let device: &Device = slotmap.get(self.device).expect("device not found");
-            device.loader().device_wait_idle()?;
-        }
-        Ok(())
-    }
-}
-
-impl Drop for Renderer {
-    fn drop(&mut self) {
-        self.wait().unwrap();
-        {
-            let mut slotmap = Fence::slotmap().write().unwrap();
-            for fence in self.in_flight_fences.iter() {
-                slotmap.remove(*fence);
-            }
-        }
-        {
-            let mut slotmap = Semaphore::slotmap().write().unwrap();
-            for semaphore in self.render_finished_semaphores.iter() {
-                slotmap.remove(*semaphore);
-            }
-            for semaphore in self.image_available_semaphores.iter() {
-                slotmap.remove(*semaphore);
-            }
-        }
-        {
-            let mut slotmap = CommandBuffers::slotmap().write().unwrap();
-            slotmap.remove(self.command_buffers);
-        }
-        {
-            let mut slotmap = CommandPool::slotmap().write().unwrap();
-            slotmap.remove(self.command_pool);
-        }
-        {
-            let mut slotmap = Framebuffer::slotmap().write().unwrap();
-            for framebuffer in self.framebuffers.iter() {
-                slotmap.remove(*framebuffer);
-            }
-        }
-        {
-            let mut slotmap = GraphicsPipeline::slotmap().write().unwrap();
-            slotmap.remove(self.graphics_pipeline);
-        }
-        {
-            let mut slotmap = PipelineLayout::slotmap().write().unwrap();
-            slotmap.remove(self.pipeline_layout);
-        }
-        {
-            let mut slotmap = RenderPass::slotmap().write().unwrap();
-            slotmap.remove(self.render_pass);
-        }
-        {
-            let mut slotmap = ImageView::slotmap().write().unwrap();
-            for image_view in self.swapchain_image_views.iter() {
-                slotmap.remove(*image_view);
-            }
-        }
-        {
-            let mut slotmap = Image::slotmap().write().unwrap();
-            for image in self.swapchain_images.iter() {
-                slotmap.remove(*image);
-            }
-        }
-        {
-            let mut slotmap = Swapchain::slotmap().write().unwrap();
-            slotmap.remove(self.swapchain);
-        }
-        {
-            let mut slotmap = Queue::slotmap().write().unwrap();
-            for queue in self.device_queues.iter() {
-                slotmap.remove(*queue);
-            }
-        }
-        {
-            let mut slotmap = Device::slotmap().write().unwrap();
-            slotmap.remove(self.device);
-        }
-        {
-            let mut slotmap = PhysicalDevice::slotmap().write().unwrap();
-            slotmap.remove(self.physical_device);
-        }
-        {
-            let mut slotmap = Surface::slotmap().write().unwrap();
-            slotmap.remove(self.surface);
-        }
-        if let Some(debug_utils) = self.debug_utils {
-            let mut slotmap = DebugUtils::slotmap().write().unwrap();
-            slotmap.remove(debug_utils);
-        }
-        {
-            let mut slotmap = Instance::slotmap().write().unwrap();
-            slotmap.remove(self.instance);
-        }
+        let future = acquire_future
+            .then_execute(self.graphics_queue.clone(), command_buffer)
+            .map_err(|err| Error::new("command buffer execution failure", err))?
+            .then_swapchain_present(
+                self.present_queue.clone(),
+                self.swapchain.clone(),
+                image_index,
+            )
+            .then_signal_fence_and_flush()
+            .map_err(|err| Error::new("fence signal failure", err))?;
+        future
+            .wait(None)
+            .map_err(|err| Error::new("waiting failure", err))
     }
 }

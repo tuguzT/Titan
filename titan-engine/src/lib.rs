@@ -1,12 +1,10 @@
 use std::mem::ManuallyDrop;
 
-use winit::dpi::LogicalSize;
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
 
 use config::Config;
-use error::{Error, Result};
+use error::Result;
 use graphics::Renderer;
 
 pub mod config;
@@ -25,20 +23,8 @@ where
     T: 'static + FnMut(MyEvent),
 {
     let event_loop = EventLoop::new();
-    let window = get_or_panic(
-        WindowBuilder::new()
-            .with_title(format!("{} version {}", config.name(), config.version()))
-            .with_min_inner_size(LogicalSize::new(250, 100))
-            .with_visible(false)
-            .build(&event_loop)
-            .map_err(|error| Error::Other {
-                message: String::from("window creation failure"),
-                source: Some(error.into()),
-            }),
-    );
-    log::info!("window initialized successfully");
 
-    let renderer = get_or_panic(Renderer::new(&config, window));
+    let renderer = get_or_panic(Renderer::new(&config, &event_loop));
     log::info!("renderer initialized successfully");
     let mut renderer = ManuallyDrop::new(renderer);
 
