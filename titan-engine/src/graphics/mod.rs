@@ -7,7 +7,7 @@ use vulkano::command_buffer::{
 };
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
-use vulkano::format::Format;
+use vulkano::format::{Format, ClearValue};
 use vulkano::image::view::ImageView;
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
@@ -16,9 +16,9 @@ use vulkano::pipeline::vertex::{BufferlessDefinition, BufferlessVertices};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
-use vulkano::swapchain;
-use vulkano::swapchain::{ColorSpace, PresentMode, Surface, Swapchain};
-use vulkano::sync::{GpuFuture, SharingMode};
+use vulkano::swapchain::{AcquireError, ColorSpace, PresentMode, Surface, Swapchain};
+use vulkano::sync::{FlushError, GpuFuture, SharingMode};
+use vulkano::{swapchain, sync};
 use vulkano_win::VkSurfaceBuild;
 use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoop;
@@ -36,8 +36,11 @@ mod utils;
 type SwapchainFramebuffer = Framebuffer<((), Arc<ImageView<Arc<SwapchainImage<Window>>>>)>;
 
 pub struct Renderer {
-    command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>>,
+    previous_frame_end: Option<Box<dyn GpuFuture>>,
+    recreate_swapchain: bool,
+
     framebuffers: Vec<Arc<SwapchainFramebuffer>>,
+    dynamic_state: DynamicState,
     graphics_pipeline: Arc<GraphicsPipeline<BufferlessDefinition>>,
     render_pass: Arc<RenderPass>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
@@ -46,8 +49,8 @@ pub struct Renderer {
     present_queue: Arc<Queue>,
     device: Arc<Device>,
     surface: Arc<Surface<Window>>,
-    debug_callback: Option<DebugCallback>,
-    instance: Arc<Instance>,
+    _debug_callback: Option<DebugCallback>,
+    _instance: Arc<Instance>,
 }
 
 impl Renderer {
@@ -258,14 +261,6 @@ impl Renderer {
             .map_err(|err| Error::new("vertex shader module creation failure", err))?;
         let frag_shader_module = shader::fragment::Shader::load(device.clone())
             .map_err(|err| Error::new("fragment shader module creation failure", err))?;
-        let viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: {
-                let dimensions = swapchain.dimensions();
-                [dimensions[0] as f32, dimensions[1] as f32]
-            },
-            depth_range: 0.0..1.0,
-        };
         let graphics_pipeline = Arc::new(
             GraphicsPipeline::start()
                 .vertex_input(BufferlessDefinition {})
@@ -273,7 +268,7 @@ impl Renderer {
                 .fragment_shader(frag_shader_module.main_entry_point(), ())
                 .triangle_list()
                 .primitive_restart(false)
-                .viewports(vec![viewport])
+                .viewports_dynamic_scissors_irrelevant(1)
                 .depth_clamp(false)
                 .cull_mode_back()
                 .front_face_clockwise()
@@ -282,7 +277,47 @@ impl Renderer {
                 .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
         );
 
-        let framebuffers = swapchain_images
+        let mut dynamic_state = DynamicState::none();
+        let framebuffers = Self::create_framebuffers(
+            swapchain_images.as_slice(),
+            render_pass.clone(),
+            &mut dynamic_state,
+        )?;
+
+        let previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+        Ok(Self {
+            _instance: instance,
+            _debug_callback: debug_callback,
+            surface,
+            device,
+            graphics_queue,
+            present_queue,
+            swapchain,
+            swapchain_images,
+            render_pass,
+            graphics_pipeline,
+            dynamic_state,
+            framebuffers,
+            previous_frame_end,
+            recreate_swapchain: false,
+        })
+    }
+
+    fn create_framebuffers(
+        images: &[Arc<SwapchainImage<Window>>],
+        render_pass: Arc<RenderPass>,
+        dynamic_state: &mut DynamicState,
+    ) -> Result<Vec<Arc<SwapchainFramebuffer>>> {
+        let dimensions = images[0].dimensions();
+
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+            depth_range: 0.0..1.0,
+        };
+        dynamic_state.viewports = Some(vec![viewport]);
+
+        images
             .iter()
             .map(|image| {
                 let image_view = ImageView::new(image.clone())
@@ -294,63 +329,7 @@ impl Renderer {
                     .map_err(|err| Error::new("framebuffer creation failure", err))?;
                 Ok(Arc::new(framebuffer))
             })
-            .collect::<Result<Vec<_>>>()?;
-
-        let command_buffers = {
-            let queue_family = graphics_queue.family();
-            let vertices = BufferlessVertices {
-                vertices: 3,
-                instances: 1,
-            };
-            let clear_values = vec![[0.0, 0.0, 0.0, 1.0].into()];
-            framebuffers
-                .iter()
-                .map(|framebuffer| {
-                    let mut builder = AutoCommandBufferBuilder::primary(
-                        device.clone(),
-                        queue_family,
-                        CommandBufferUsage::MultipleSubmit,
-                    )
-                    .map_err(|err| Error::new("command buffer creation failure", err))?;
-                    builder
-                        .begin_render_pass(
-                            framebuffer.clone(),
-                            SubpassContents::Inline,
-                            clear_values.clone(),
-                        )
-                        .map_err(|err| Error::new("begin render pass failure", err))?
-                        .draw(
-                            graphics_pipeline.clone(),
-                            &DynamicState::none(),
-                            vertices,
-                            (),
-                            (),
-                        )
-                        .map_err(|err| Error::new("draw command failure", err))?
-                        .end_render_pass()
-                        .map_err(|err| Error::new("end render pass failure", err))?;
-                    let command_buffer = builder
-                        .build()
-                        .map_err(|err| Error::new("command buffer creation failure", err))?;
-                    Ok(Arc::new(command_buffer))
-                })
-                .collect::<Result<Vec<_>>>()?
-        };
-
-        Ok(Self {
-            instance,
-            debug_callback,
-            surface,
-            device,
-            graphics_queue,
-            present_queue,
-            swapchain,
-            swapchain_images,
-            render_pass,
-            graphics_pipeline,
-            framebuffers,
-            command_buffers,
-        })
+            .collect()
     }
 
     pub fn window(&self) -> &Window {
@@ -358,12 +337,74 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<()> {
-        let (image_index, _suboptimal, acquire_future) =
-            swapchain::acquire_next_image(self.swapchain.clone(), None)
-                .map_err(|err| Error::new("failed to acquire next image", err))?;
-        let command_buffer = self.command_buffers[image_index].clone();
+        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
-        let future = acquire_future
+        if self.recreate_swapchain {
+            let dimensions = self.window().inner_size().into();
+            let (swapchain, swapchain_images) = self
+                .swapchain
+                .recreate()
+                .dimensions(dimensions)
+                .build()
+                .map_err(|err| Error::new("failed to recreate swapchain", err))?;
+            self.swapchain = swapchain;
+            self.swapchain_images = swapchain_images;
+            self.framebuffers = Self::create_framebuffers(
+                self.swapchain_images.as_slice(),
+                self.render_pass.clone(),
+                &mut self.dynamic_state,
+            )?;
+            self.recreate_swapchain = false;
+        }
+
+        let (image_index, suboptimal, acquire_future) =
+            match swapchain::acquire_next_image(self.swapchain.clone(), None) {
+                Ok(r) => r,
+                Err(AcquireError::OutOfDate) => {
+                    self.recreate_swapchain = true;
+                    return Ok(());
+                }
+                Err(err) => return Err(Error::new("failed to acquire next image", err)),
+            };
+        self.recreate_swapchain = suboptimal;
+
+        let framebuffer = self.framebuffers[image_index].clone();
+        let command_buffer: PrimaryAutoCommandBuffer = {
+            let vertices = BufferlessVertices {
+                vertices: 3,
+                instances: 1,
+            };
+            let clear_values: Vec<ClearValue> = vec![[0.0, 0.0, 0.0, 1.0].into()];
+
+            let mut builder = AutoCommandBufferBuilder::primary(
+                self.device.clone(),
+                self.graphics_queue.family(),
+                CommandBufferUsage::OneTimeSubmit,
+            )
+            .map_err(|err| Error::new("command buffer creation failure", err))?;
+            builder
+                .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
+                .map_err(|err| Error::new("begin render pass failure", err))?
+                .draw(
+                    self.graphics_pipeline.clone(),
+                    &self.dynamic_state,
+                    vertices,
+                    (),
+                    (),
+                )
+                .map_err(|err| Error::new("draw command failure", err))?
+                .end_render_pass()
+                .map_err(|err| Error::new("end render pass failure", err))?;
+            builder
+                .build()
+                .map_err(|err| Error::new("command buffer creation failure", err))?
+        };
+
+        let future = self
+            .previous_frame_end
+            .take()
+            .unwrap()
+            .join(acquire_future)
             .then_execute(self.graphics_queue.clone(), command_buffer)
             .map_err(|err| Error::new("command buffer execution failure", err))?
             .then_swapchain_present(
@@ -371,10 +412,21 @@ impl Renderer {
                 self.swapchain.clone(),
                 image_index,
             )
-            .then_signal_fence_and_flush()
-            .map_err(|err| Error::new("fence signal failure", err))?;
-        future
-            .wait(None)
-            .map_err(|err| Error::new("waiting failure", err))
+            .then_signal_fence_and_flush();
+        match future {
+            Ok(future) => {
+                self.previous_frame_end = Some(Box::new(future));
+                Ok(())
+            }
+            Err(FlushError::OutOfDate) => {
+                self.recreate_swapchain = true;
+                self.previous_frame_end = Some(Box::new(sync::now(self.device.clone())));
+                Ok(())
+            }
+            Err(err) => {
+                self.previous_frame_end = Some(Box::new(sync::now(self.device.clone())));
+                Err(Error::new("failed to flush future", err))
+            }
+        }
     }
 }
