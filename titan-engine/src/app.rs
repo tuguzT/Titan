@@ -76,10 +76,10 @@ impl Application {
 }
 
 /// Creates a unique application instance.
-/// If application instance was previously created, will return an error.
+/// If application instance was created earlier, it will return an error.
 ///
 ///     Panic
-/// This function panics if it will be invoked **not on main thread**.
+/// This function panics if invoked **not on main thread**.
 pub fn init(config: Config) -> Result<Application> {
     static FLAG: AtomicBool = AtomicBool::new(false);
 
