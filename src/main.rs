@@ -3,7 +3,6 @@
 use std::error::Error;
 
 use titan_engine::config::Config;
-use titan_engine::run;
 use titan_engine::window::Event;
 
 mod logger;
@@ -17,7 +16,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let version = APP_VERSION_STR.parse()?;
     let config = Config::new(APP_NAME.to_string(), version);
-    run(config, move |event| match event {
+    let application = titan_engine::init(config)?;
+    application.run(move |event| match event {
         Event::Created => {
             log::debug!("created");
         }

@@ -1,6 +1,6 @@
 use semver::Version;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     name: String,
     version: Version,
@@ -24,5 +24,11 @@ impl Config {
 
     pub fn version(&self) -> &Version {
         &self.version
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::new("Hello World".to_string(), Version::new(0, 0, 0))
     }
 }
