@@ -9,14 +9,14 @@ use graphics::Renderer;
 
 pub mod config;
 pub mod error;
+pub mod math;
 pub mod window;
 
 mod graphics;
-
-type MyEvent = window::Event;
-
 #[cfg(feature = "jni-export")]
 mod jni;
+
+type MyEvent = window::Event;
 
 pub fn run<T>(config: Config, mut callback: T) -> !
 where

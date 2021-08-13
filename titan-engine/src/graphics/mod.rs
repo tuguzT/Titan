@@ -1,18 +1,19 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
     SubpassContents,
 };
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
-use vulkano::format::{Format, ClearValue};
+use vulkano::format::{ClearValue, Format};
 use vulkano::image::view::ImageView;
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::instance::{ApplicationInfo, Instance};
-use vulkano::pipeline::vertex::{BufferlessDefinition, BufferlessVertices};
+use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
@@ -27,21 +28,36 @@ use winit::window::{Window, WindowBuilder};
 use crate::{
     config::{Config, ENGINE_NAME, ENGINE_VERSION},
     error::{Error, Result},
+    math::{vec2, vec3},
 };
+
+use self::vertex::Vertex;
 
 mod debug_callback;
 mod shader;
 mod utils;
+mod vertex;
 
 type SwapchainFramebuffer = Framebuffer<((), Arc<ImageView<Arc<SwapchainImage<Window>>>>)>;
+
+const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
+
+lazy_static::lazy_static! {
+    static ref VERTICES: [Vertex; 3] = [
+        Vertex::new(vec2(0.0, -0.5), vec3(1.0, 0.0, 0.0)),
+        Vertex::new(vec2(0.5, 0.5), vec3(0.0, 1.0, 0.0)),
+        Vertex::new(vec2(-0.5, 0.5), vec3(0.0, 0.0, 1.0)),
+    ];
+}
 
 pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     recreate_swapchain: bool,
 
+    vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
     framebuffers: Vec<Arc<SwapchainFramebuffer>>,
     dynamic_state: DynamicState,
-    graphics_pipeline: Arc<GraphicsPipeline<BufferlessDefinition>>,
+    graphics_pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
     render_pass: Arc<RenderPass>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
     swapchain: Arc<Swapchain<Window>>,
@@ -55,8 +71,6 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(config: &Config, event_loop: &EventLoop<()>) -> Result<Self> {
-        const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
-
         let instance = {
             let info = ApplicationInfo {
                 application_name: Some(config.name().into()),
@@ -263,7 +277,7 @@ impl Renderer {
             .map_err(|err| Error::new("fragment shader module creation failure", err))?;
         let graphics_pipeline = Arc::new(
             GraphicsPipeline::start()
-                .vertex_input(BufferlessDefinition {})
+                .vertex_input_single_buffer::<Vertex>()
                 .vertex_shader(vert_shader_module.main_entry_point(), ())
                 .fragment_shader(frag_shader_module.main_entry_point(), ())
                 .triangle_list()
@@ -284,6 +298,16 @@ impl Renderer {
             &mut dynamic_state,
         )?;
 
+        let (vertex_buffer, future) = ImmutableBuffer::from_iter(
+            VERTICES.iter().cloned(),
+            BufferUsage::vertex_buffer(),
+            graphics_queue.clone(),
+        )
+        .map_err(|err| Error::new("vertex buffer creation failure", err))?;
+        future
+            .flush()
+            .map_err(|err| Error::new("vertex buffer creation failure", err))?;
+
         let previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
         Ok(Self {
             _instance: instance,
@@ -298,6 +322,7 @@ impl Renderer {
             graphics_pipeline,
             dynamic_state,
             framebuffers,
+            vertex_buffer,
             previous_frame_end,
             recreate_swapchain: false,
         })
@@ -370,10 +395,6 @@ impl Renderer {
 
         let framebuffer = self.framebuffers[image_index].clone();
         let command_buffer: PrimaryAutoCommandBuffer = {
-            let vertices = BufferlessVertices {
-                vertices: 3,
-                instances: 1,
-            };
             let clear_values: Vec<ClearValue> = vec![[0.0, 0.0, 0.0, 1.0].into()];
 
             let mut builder = AutoCommandBufferBuilder::primary(
@@ -388,7 +409,7 @@ impl Renderer {
                 .draw(
                     self.graphics_pipeline.clone(),
                     &self.dynamic_state,
-                    vertices,
+                    self.vertex_buffer.clone(),
                     (),
                     (),
                 )
