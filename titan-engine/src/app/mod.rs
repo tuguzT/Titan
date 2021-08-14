@@ -48,6 +48,11 @@ impl Application {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(size) => {
                             let size = (size.width, size.height);
+                            if let Err(error) = me.renderer.resize() {
+                                log::error!("window resizing error: {}", error);
+                                *control_flow = ControlFlow::Exit;
+                                return;
+                            }
                             callback(MyEvent::Resized(size.into()));
                         }
                         _ => (),
@@ -59,8 +64,7 @@ impl Application {
                         return;
                     }
                     if let Err(error) = me.renderer.render() {
-                        log::error!("{}", error);
-                        log::info!("exit event sent due to previous error");
+                        log::error!("rendering error: {}", error);
                         *control_flow = ControlFlow::Exit;
                     }
                 }

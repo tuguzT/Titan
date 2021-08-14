@@ -362,25 +362,29 @@ impl Renderer {
         self.surface.window()
     }
 
+    pub fn resize(&mut self) -> Result<()> {
+        let dimensions = self.window().inner_size().into();
+        let (swapchain, swapchain_images) = self
+            .swapchain
+            .recreate()
+            .dimensions(dimensions)
+            .build()
+            .map_err(|err| Error::new("failed to recreate swapchain", err))?;
+        self.swapchain = swapchain;
+        self.swapchain_images = swapchain_images;
+        self.framebuffers = Self::create_framebuffers(
+            self.swapchain_images.as_slice(),
+            self.render_pass.clone(),
+            &mut self.dynamic_state,
+        )?;
+        self.recreate_swapchain = false;
+        Ok(())
+    }
+
     pub fn render(&mut self) -> Result<()> {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
-
         if self.recreate_swapchain {
-            let dimensions = self.window().inner_size().into();
-            let (swapchain, swapchain_images) = self
-                .swapchain
-                .recreate()
-                .dimensions(dimensions)
-                .build()
-                .map_err(|err| Error::new("failed to recreate swapchain", err))?;
-            self.swapchain = swapchain;
-            self.swapchain_images = swapchain_images;
-            self.framebuffers = Self::create_framebuffers(
-                self.swapchain_images.as_slice(),
-                self.render_pass.clone(),
-                &mut self.dynamic_state,
-            )?;
-            self.recreate_swapchain = false;
+            self.resize()?;
         }
 
         let (image_index, suboptimal, acquire_future) =
