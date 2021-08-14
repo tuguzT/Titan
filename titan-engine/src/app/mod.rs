@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub struct Application {
-    config: Config,
+    _config: Config,
     renderer: Renderer,
     event_loop: Option<EventLoop<()>>,
 }
@@ -23,7 +23,7 @@ impl Application {
         let renderer = Renderer::new(&config, &event_loop)?;
         Ok(Self {
             renderer,
-            config,
+            _config: config,
             event_loop: Some(event_loop),
         })
     }
@@ -79,7 +79,7 @@ impl Application {
 /// If application instance was created earlier, it will return an error.
 ///
 ///     Panic
-/// This function panics if invoked **not on main thread**.
+/// This function could panic if invoked **not on main thread**.
 pub fn init(config: Config) -> Result<Application> {
     static FLAG: AtomicBool = AtomicBool::new(false);
 
