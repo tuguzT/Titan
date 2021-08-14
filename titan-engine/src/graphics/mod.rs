@@ -51,7 +51,7 @@ lazy_static::lazy_static! {
 }
 
 pub struct Renderer {
-    previous_frame_end: Option<Box<dyn GpuFuture>>,
+    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
 
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
@@ -162,9 +162,10 @@ impl Renderer {
             })
             .ok_or_else(|| Error::from("no suitable physical device were found"))?;
         log::info!(
-            r#"using device "{}" (type "{:?}")"#,
+            r#"using device "{}" of type "{:?}" with Vulkan version {}"#,
             physical_device.properties().device_name,
             physical_device.properties().device_type,
+            physical_device.api_version(),
         );
 
         let (device, mut queues) = {
