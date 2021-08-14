@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -71,7 +72,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(config: &Config, event_loop: &EventLoop<()>) -> Result<Self> {
+    pub fn new(config: &Config, event_loop: &EventLoop<impl Any>) -> Result<Self> {
         let instance = {
             let info = ApplicationInfo {
                 application_name: Some(config.name().into()),
@@ -433,7 +434,7 @@ impl Renderer {
             .unwrap()
             .join(acquire_future)
             .then_execute(self.graphics_queue.clone(), command_buffer)
-            .map_err(|err| Error::new("command buffer execution failure", err))?
+            .map_err(|err| Error::new("command buffer cannot be submitted", err))?
             .then_swapchain_present(
                 self.present_queue.clone(),
                 self.swapchain.clone(),
@@ -452,7 +453,7 @@ impl Renderer {
             }
             Err(err) => {
                 self.previous_frame_end = Some(Box::new(sync::now(self.device.clone())));
-                Err(Error::new("failed to flush future", err))
+                Err(Error::new("failed to submit commands", err))
             }
         }
     }

@@ -8,7 +8,7 @@ struct Vec2(glam::Vec2);
 #[repr(transparent)]
 struct Color(palette::Srgb);
 
-#[derive(Copy, Clone, Default)]
+#[derive(Default, Copy, Clone)]
 #[repr(C)]
 pub struct Vertex {
     position: Vec2,
