@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use glam::Vec2;
+use palette::Srgb;
 use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
@@ -28,7 +30,6 @@ use winit::window::{Window, WindowBuilder};
 use crate::{
     config::{Config, ENGINE_NAME, ENGINE_VERSION},
     error::{Error, Result},
-    math::{vec2, vec3},
 };
 
 use self::vertex::Vertex;
@@ -44,9 +45,9 @@ const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 lazy_static::lazy_static! {
     static ref VERTICES: [Vertex; 3] = [
-        Vertex::new(vec2(0.0, -0.5), vec3(1.0, 0.0, 0.0)),
-        Vertex::new(vec2(0.5, 0.5), vec3(0.0, 1.0, 0.0)),
-        Vertex::new(vec2(-0.5, 0.5), vec3(0.0, 0.0, 1.0)),
+        Vertex::new(Vec2::new(0.0, -0.5), Srgb::new(1.0, 0.0, 0.0)),
+        Vertex::new(Vec2::new(0.5, 0.5), Srgb::new(0.0, 1.0, 0.0)),
+        Vertex::new(Vec2::new(-0.5, 0.5), Srgb::new(0.0, 0.0, 1.0)),
     ];
 }
 

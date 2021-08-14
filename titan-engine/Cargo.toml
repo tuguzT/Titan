@@ -17,6 +17,7 @@ vulkano = "0.25.0"
 vulkano-win = "0.25.0"
 vulkano-shaders = "0.25.0"
 glam = "0.17.3"
+palette = "0.6.0"
 
 pretty_env_logger = { version = "0.4.0", optional = true }
 jni = { version = "0.19.0", optional = true }

@@ -1,17 +1,18 @@
 use vulkano::pipeline::vertex::{VertexMember, VertexMemberTy};
 
-use crate::math;
+#[derive(Default, Copy, Clone)]
+#[repr(transparent)]
+struct Vec2(glam::Vec2);
 
 #[derive(Default, Copy, Clone)]
-struct Vec2(math::Vec2);
-
-#[derive(Default, Copy, Clone)]
-struct Vec3(math::Vec3);
+#[repr(transparent)]
+struct Color(palette::Srgb);
 
 #[derive(Copy, Clone, Default)]
+#[repr(C)]
 pub struct Vertex {
     position: Vec2,
-    color: Vec3,
+    color: Color,
 }
 
 unsafe impl VertexMember for Vec2 {
@@ -20,7 +21,7 @@ unsafe impl VertexMember for Vec2 {
     }
 }
 
-unsafe impl VertexMember for Vec3 {
+unsafe impl VertexMember for Color {
     fn format() -> (VertexMemberTy, usize) {
         (VertexMemberTy::F32, 3)
     }
@@ -29,10 +30,10 @@ unsafe impl VertexMember for Vec3 {
 vulkano::impl_vertex!(Vertex, position, color);
 
 impl Vertex {
-    pub const fn new(position: math::Vec2, color: math::Vec3) -> Self {
+    pub const fn new(position: glam::Vec2, color: palette::Srgb) -> Self {
         Self {
             position: Vec2(position),
-            color: Vec3(color),
+            color: Color(color),
         }
     }
 }

@@ -3,7 +3,6 @@ pub use app::init;
 pub mod app;
 pub mod config;
 pub mod error;
-pub mod math;
 pub mod window;
 
 mod graphics;
