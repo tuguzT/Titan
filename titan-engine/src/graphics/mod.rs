@@ -43,12 +43,14 @@ mod vertex;
 type SwapchainFramebuffer = Framebuffer<((), Arc<ImageView<Arc<SwapchainImage<Window>>>>)>;
 
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
+const INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 lazy_static::lazy_static! {
-    static ref VERTICES: [Vertex; 3] = [
-        Vertex::new(Vec2::new(0.0, -0.5), Srgb::new(1.0, 0.0, 0.0)),
-        Vertex::new(Vec2::new(0.5, 0.5), Srgb::new(0.0, 1.0, 0.0)),
-        Vertex::new(Vec2::new(-0.5, 0.5), Srgb::new(0.0, 0.0, 1.0)),
+    static ref VERTICES: [Vertex; 4] = [
+        Vertex::new(Vec2::new(-0.5, -0.5), Srgb::new(1.0, 0.0, 0.0)),
+        Vertex::new(Vec2::new(0.5, -0.5), Srgb::new(0.0, 1.0, 0.0)),
+        Vertex::new(Vec2::new(0.5, 0.5), Srgb::new(0.0, 0.0, 1.0)),
+        Vertex::new(Vec2::new(-0.5, 0.5), Srgb::new(1.0, 1.0, 1.0)),
     ];
 }
 
@@ -56,7 +58,9 @@ pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
 
+    index_buffer: Arc<ImmutableBuffer<[u16]>>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
+
     framebuffers: Vec<Arc<SwapchainFramebuffer>>,
     dynamic_state: DynamicState,
     graphics_pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
@@ -301,15 +305,31 @@ impl Renderer {
             &mut dynamic_state,
         )?;
 
-        let (vertex_buffer, future) = ImmutableBuffer::from_iter(
-            VERTICES.iter().cloned(),
-            BufferUsage::vertex_buffer(),
-            graphics_queue.clone(),
-        )
-        .map_err(|err| Error::new("vertex buffer creation failure", err))?;
-        future
-            .flush()
+        let vertex_buffer = {
+            let (vertex_buffer, future) = ImmutableBuffer::from_iter(
+                VERTICES.iter().cloned(),
+                BufferUsage::vertex_buffer(),
+                graphics_queue.clone(),
+            )
             .map_err(|err| Error::new("vertex buffer creation failure", err))?;
+            future
+                .flush()
+                .map_err(|err| Error::new("vertex buffer creation failure", err))?;
+            vertex_buffer
+        };
+
+        let index_buffer = {
+            let (index_buffer, future) = ImmutableBuffer::from_iter(
+                INDICES.iter().cloned(),
+                BufferUsage::index_buffer(),
+                graphics_queue.clone(),
+            )
+            .map_err(|err| Error::new("index buffer creation failure", err))?;
+            future
+                .flush()
+                .map_err(|err| Error::new("index buffer creation failure", err))?;
+            index_buffer
+        };
 
         let previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
         Ok(Self {
@@ -326,6 +346,7 @@ impl Renderer {
             dynamic_state,
             framebuffers,
             vertex_buffer,
+            index_buffer,
             previous_frame_end,
             recreate_swapchain: false,
         })
@@ -413,10 +434,11 @@ impl Renderer {
             builder
                 .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
                 .map_err(|err| Error::new("begin render pass failure", err))?
-                .draw(
+                .draw_indexed(
                     self.graphics_pipeline.clone(),
                     &self.dynamic_state,
                     self.vertex_buffer.clone(),
+                    self.index_buffer.clone(),
                     (),
                     (),
                 )

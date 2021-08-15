@@ -1,21 +1,23 @@
+use glam::Vec2;
+use palette::Srgb;
 use vulkano::pipeline::vertex::{VertexMember, VertexMemberTy};
 
 #[derive(Default, Copy, Clone)]
 #[repr(transparent)]
-struct Vec2(glam::Vec2);
+struct Position(Vec2);
 
 #[derive(Default, Copy, Clone)]
 #[repr(transparent)]
-struct Color(palette::Srgb);
+struct Color(Srgb);
 
 #[derive(Default, Copy, Clone)]
 #[repr(C)]
 pub struct Vertex {
-    position: Vec2,
+    position: Position,
     color: Color,
 }
 
-unsafe impl VertexMember for Vec2 {
+unsafe impl VertexMember for Position {
     fn format() -> (VertexMemberTy, usize) {
         (VertexMemberTy::F32, 2)
     }
@@ -30,9 +32,9 @@ unsafe impl VertexMember for Color {
 vulkano::impl_vertex!(Vertex, position, color);
 
 impl Vertex {
-    pub const fn new(position: glam::Vec2, color: palette::Srgb) -> Self {
+    pub const fn new(position: Vec2, color: Srgb) -> Self {
         Self {
-            position: Vec2(position),
+            position: Position(position),
             color: Color(color),
         }
     }

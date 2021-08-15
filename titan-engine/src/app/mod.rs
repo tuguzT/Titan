@@ -19,7 +19,7 @@ pub struct Application {
 
 impl Application {
     fn new(config: Config) -> Result<Self> {
-        let event_loop = EventLoop::new();
+        let event_loop = EventLoop::with_user_event();
         let renderer = Renderer::new(&config, &event_loop)?;
         Ok(Self {
             renderer,
