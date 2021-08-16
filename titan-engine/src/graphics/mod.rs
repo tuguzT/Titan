@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use glam::Vec2;
-use palette::Srgb;
+use palette::Srgba;
 use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
@@ -47,10 +47,10 @@ const INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 lazy_static::lazy_static! {
     static ref VERTICES: [Vertex; 4] = [
-        Vertex::new(Vec2::new(-0.5, -0.5), Srgb::new(1.0, 0.0, 0.0)),
-        Vertex::new(Vec2::new(0.5, -0.5), Srgb::new(0.0, 1.0, 0.0)),
-        Vertex::new(Vec2::new(0.5, 0.5), Srgb::new(0.0, 0.0, 1.0)),
-        Vertex::new(Vec2::new(-0.5, 0.5), Srgb::new(1.0, 1.0, 1.0)),
+        Vertex::new(Vec2::new(-0.5, -0.5), Srgba::new(1.0, 0.0, 0.0, 1.0)),
+        Vertex::new(Vec2::new(0.5, -0.5), Srgba::new(0.0, 1.0, 0.0, 1.0)),
+        Vertex::new(Vec2::new(0.5, 0.5), Srgba::new(0.0, 0.0, 1.0, 1.0)),
+        Vertex::new(Vec2::new(-0.5, 0.5), Srgba::new(1.0, 1.0, 1.0, 1.0)),
     ];
 }
 
@@ -210,7 +210,7 @@ impl Renderer {
                 *formats
                     .iter()
                     .find(|(format, color_space)| {
-                        *format == Format::B8G8R8A8Unorm
+                        *format == Format::B8G8R8A8Srgb
                             && *color_space == ColorSpace::SrgbNonLinear
                     })
                     .unwrap_or_else(|| &formats[0])
