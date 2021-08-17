@@ -44,10 +44,13 @@ mod utils;
 mod vertex;
 
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
-const INDICES: [u16; 12] = [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4];
 
-lazy_static::lazy_static! {
-    static ref VERTICES: [Vertex; 8] = [
+const fn indices() -> [u16; 12] {
+    [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4]
+}
+
+fn vertices() -> [Vertex; 8] {
+    [
         Vertex::new(Vec3::new(-0.5, -0.5, 0.0), Srgba::new(1.0, 0.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, -0.5, 0.0), Srgba::new(0.0, 1.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, 0.5, 0.0), Srgba::new(0.0, 0.0, 1.0, 1.0)),
@@ -57,7 +60,7 @@ lazy_static::lazy_static! {
         Vertex::new(Vec3::new(0.5, -0.5, -0.5), Srgba::new(0.0, 1.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, 0.5, -0.5), Srgba::new(0.0, 0.0, 1.0, 1.0)),
         Vertex::new(Vec3::new(-0.5, 0.5, -0.5), Srgba::new(1.0, 1.0, 1.0, 1.0)),
-    ];
+    ]
 }
 
 pub struct Renderer {
@@ -114,14 +117,9 @@ impl Renderer {
         let debug_callback = if ENABLE_VALIDATION {
             let debug_callback = DebugCallback::new(
                 &instance,
-                MessageSeverity {
-                    error: true,
-                    warning: true,
-                    information: true,
-                    verbose: true,
-                },
+                MessageSeverity::all(),
                 MessageType::all(),
-                debug_callback::callback,
+                self::debug_callback::callback,
             )
             .map_err(|err| Error::new("debug callback creation failure", err))?;
             log::info!("debug callback was attached to the instance");
@@ -149,8 +147,7 @@ impl Renderer {
         let (physical_device, graphics_family, present_family, transfer_family) = physical_devices
             .filter(|device: &PhysicalDevice| {
                 let extensions = device.supported_extensions();
-                // All required extensions are supported by device
-                required_extensions.intersection(extensions) == required_extensions
+                extensions.is_superset_of(&required_extensions)
             })
             .filter_map(|device| {
                 let graphics_family = device
@@ -355,7 +352,7 @@ impl Renderer {
 
         let vertex_buffer = {
             let (vertex_buffer, future) = ImmutableBuffer::from_iter(
-                VERTICES.iter().cloned(),
+                vertices().iter().cloned(),
                 BufferUsage::vertex_buffer(),
                 graphics_queue.clone(),
             )
@@ -368,7 +365,7 @@ impl Renderer {
 
         let index_buffer = {
             let (index_buffer, future) = ImmutableBuffer::from_iter(
-                INDICES.iter().cloned(),
+                indices().iter().cloned(),
                 BufferUsage::index_buffer(),
                 graphics_queue.clone(),
             )
@@ -520,17 +517,11 @@ impl Renderer {
         let framebuffer = self.framebuffers[image_index].clone();
 
         let transfer_command_buffer = {
-            let mut builder = AutoCommandBufferBuilder::primary(
-                self.device.clone(),
-                self.transfer_queue.family(),
-                CommandBufferUsage::OneTimeSubmit,
-            )
-            .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
-            let buffer = self.uniform_buffers[image_index].clone();
+            let uniform_buffer = self.uniform_buffers[image_index].clone();
             let ubo = {
                 let duration = Instant::now().duration_since(self.start_time);
                 let elapsed = duration.as_millis();
-                CameraUBO {
+                Box::new(CameraUBO {
                     projection: {
                         let mut projection = Mat4::perspective_rh(
                             45f32.to_radians(),
@@ -543,10 +534,17 @@ impl Renderer {
                     },
                     model: Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians()),
                     view: Mat4::look_at_rh(Vec3::new(2.0, 2.0, 2.0), Vec3::ZERO, Vec3::Z),
-                }
+                })
             };
+
+            let mut builder = AutoCommandBufferBuilder::primary(
+                self.device.clone(),
+                self.transfer_queue.family(),
+                CommandBufferUsage::OneTimeSubmit,
+            )
+            .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
             builder
-                .update_buffer(buffer, Box::new(ubo))
+                .update_buffer(uniform_buffer, ubo)
                 .map_err(|err| Error::new("update buffer command creation failure", err))?;
             builder
                 .build()
@@ -557,6 +555,7 @@ impl Renderer {
                 ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
                 ClearValue::Depth(1.0),
             ];
+            let descriptor_set = self.descriptor_sets[image_index].clone();
 
             let mut builder = AutoCommandBufferBuilder::primary(
                 self.device.clone(),
@@ -564,7 +563,6 @@ impl Renderer {
                 CommandBufferUsage::OneTimeSubmit,
             )
             .map_err(|err| Error::new("draw command buffer creation failure", err))?;
-            let descriptor_set = self.descriptor_sets[image_index].clone();
             builder
                 .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
                 .map_err(|err| Error::new("begin render pass failure", err))?
