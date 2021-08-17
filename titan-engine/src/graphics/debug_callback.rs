@@ -1,5 +1,3 @@
-#[rustfmt:skip]
-
 use log::Level;
 use vulkano::instance::debug::{Message, MessageSeverity, MessageType};
 
