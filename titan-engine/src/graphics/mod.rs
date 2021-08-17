@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Mat4, Vec3};
 use palette::Srgba;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
@@ -14,13 +14,13 @@ use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::{ClearValue, Format};
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageUsage, SwapchainImage};
+use vulkano::image::{AttachmentImage, ImageAccess, ImageUsage, SwapchainImage};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::instance::{ApplicationInfo, Instance};
 use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
-use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
+use vulkano::render_pass::{Framebuffer, FramebufferAbstract, RenderPass, Subpass};
 use vulkano::swapchain::{AcquireError, ColorSpace, PresentMode, Surface, Swapchain};
 use vulkano::sync::{FlushError, GpuFuture, SharingMode};
 use vulkano::{swapchain, sync};
@@ -43,17 +43,20 @@ mod shader;
 mod utils;
 mod vertex;
 
-type SwapchainFramebuffer = Framebuffer<((), Arc<ImageView<Arc<SwapchainImage<Window>>>>)>;
-
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
-const INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
+const INDICES: [u16; 12] = [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4];
 
 lazy_static::lazy_static! {
-    static ref VERTICES: [Vertex; 4] = [
-        Vertex::new(Vec2::new(-0.5, -0.5), Srgba::new(1.0, 0.0, 0.0, 1.0)),
-        Vertex::new(Vec2::new(0.5, -0.5), Srgba::new(0.0, 1.0, 0.0, 1.0)),
-        Vertex::new(Vec2::new(0.5, 0.5), Srgba::new(0.0, 0.0, 1.0, 1.0)),
-        Vertex::new(Vec2::new(-0.5, 0.5), Srgba::new(1.0, 1.0, 1.0, 1.0)),
+    static ref VERTICES: [Vertex; 8] = [
+        Vertex::new(Vec3::new(-0.5, -0.5, 0.0), Srgba::new(1.0, 0.0, 0.0, 1.0)),
+        Vertex::new(Vec3::new(0.5, -0.5, 0.0), Srgba::new(0.0, 1.0, 0.0, 1.0)),
+        Vertex::new(Vec3::new(0.5, 0.5, 0.0), Srgba::new(0.0, 0.0, 1.0, 1.0)),
+        Vertex::new(Vec3::new(-0.5, 0.5, 0.0), Srgba::new(1.0, 1.0, 1.0, 1.0)),
+
+        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Srgba::new(1.0, 0.0, 0.0, 1.0)),
+        Vertex::new(Vec3::new(0.5, -0.5, -0.5), Srgba::new(0.0, 1.0, 0.0, 1.0)),
+        Vertex::new(Vec3::new(0.5, 0.5, -0.5), Srgba::new(0.0, 0.0, 1.0, 1.0)),
+        Vertex::new(Vec3::new(-0.5, 0.5, -0.5), Srgba::new(1.0, 1.0, 1.0, 1.0)),
     ];
 }
 
@@ -67,10 +70,11 @@ pub struct Renderer {
     index_buffer: Arc<ImmutableBuffer<[u16]>>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
 
-    framebuffers: Vec<Arc<SwapchainFramebuffer>>,
+    framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
     dynamic_state: DynamicState,
     graphics_pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
     render_pass: Arc<RenderPass>,
+    depth_image: Arc<AttachmentImage>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
     swapchain: Arc<Swapchain<Window>>,
     graphics_queue: Arc<Queue>,
@@ -272,6 +276,28 @@ impl Renderer {
                 .map_err(|err| Error::new("swapchain creation failure", err))?
         };
 
+        let depth_format = {
+            let suitable_formats = [
+                Format::D32Sfloat,
+                Format::D32Sfloat_S8Uint,
+                Format::D24Unorm_S8Uint,
+            ];
+            *suitable_formats
+                .iter()
+                .find(|format| {
+                    let properties = format.properties(physical_device);
+                    properties.optimal_tiling_features.depth_stencil_attachment
+                })
+                .unwrap_or(&Format::D16Unorm)
+        };
+        let depth_image = AttachmentImage::with_usage(
+            device.clone(),
+            swapchain.dimensions(),
+            depth_format,
+            ImageUsage::depth_stencil_attachment(),
+        )
+        .map_err(|err| Error::new("depth image creation failure", err))?;
+
         let render_pass = Arc::new(
             vulkano::single_pass_renderpass! {
                 device.clone(),
@@ -281,11 +307,19 @@ impl Renderer {
                         store: Store,
                         format: swapchain.format(),
                         samples: 1,
+                    },
+                    depth: {
+                        load: Clear,
+                        store: DontCare,
+                        format: depth_image.format(),
+                        samples: 1,
+                        initial_layout: ImageLayout::Undefined,
+                        final_layout: ImageLayout::DepthStencilAttachmentOptimal,
                     }
                 },
                 pass: {
                     color: [color],
-                    depth_stencil: {}
+                    depth_stencil: {depth}
                 }
             }
             .map_err(|err| Error::new("render pass creation failure", err))?,
@@ -304,7 +338,7 @@ impl Renderer {
                 .triangle_list()
                 .primitive_restart(false)
                 .viewports_dynamic_scissors_irrelevant(1)
-                .depth_clamp(false)
+                .depth_stencil_simple_depth()
                 .cull_mode_back()
                 .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
                 .build(device.clone())
@@ -316,6 +350,7 @@ impl Renderer {
             swapchain_images.as_slice(),
             render_pass.clone(),
             &mut dynamic_state,
+            &depth_image,
         )?;
 
         let vertex_buffer = {
@@ -382,6 +417,7 @@ impl Renderer {
             transfer_queue,
             swapchain,
             swapchain_images,
+            depth_image,
             render_pass,
             graphics_pipeline,
             dynamic_state,
@@ -400,16 +436,19 @@ impl Renderer {
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<RenderPass>,
         dynamic_state: &mut DynamicState,
-    ) -> Result<Vec<Arc<SwapchainFramebuffer>>> {
+        depth_image: &Arc<AttachmentImage>,
+    ) -> Result<Vec<Arc<dyn FramebufferAbstract + Send + Sync>>> {
         let dimensions = images[0].dimensions();
 
         let viewport = Viewport {
             origin: [0.0, 0.0],
-            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+            dimensions: [dimensions.width() as f32, dimensions.height() as f32],
             depth_range: 0.0..1.0,
         };
         dynamic_state.viewports = Some(vec![viewport]);
 
+        let depth_image_view = ImageView::new(depth_image.clone())
+            .map_err(|err| Error::new("depth image view creation failure", err))?;
         images
             .iter()
             .map(|image| {
@@ -418,9 +457,11 @@ impl Renderer {
                 let framebuffer = Framebuffer::start(render_pass.clone())
                     .add(image_view)
                     .map_err(|err| Error::new("failed to add an attachment to framebuffer", err))?
+                    .add(depth_image_view.clone())
+                    .map_err(|err| Error::new("failed to add a depth image to framebuffer", err))?
                     .build()
                     .map_err(|err| Error::new("framebuffer creation failure", err))?;
-                Ok(Arc::new(framebuffer))
+                Ok(Arc::new(framebuffer) as Arc<_>)
             })
             .collect()
     }
@@ -431,6 +472,7 @@ impl Renderer {
 
     pub fn resize(&mut self) -> Result<()> {
         let dimensions = self.window().inner_size().into();
+
         let (swapchain, swapchain_images) = self
             .swapchain
             .recreate()
@@ -439,11 +481,21 @@ impl Renderer {
             .map_err(|err| Error::new("failed to recreate swapchain", err))?;
         self.swapchain = swapchain;
         self.swapchain_images = swapchain_images;
+
+        self.depth_image = AttachmentImage::with_usage(
+            self.device.clone(),
+            self.swapchain.dimensions(),
+            self.depth_image.format(),
+            ImageUsage::depth_stencil_attachment(),
+        )
+        .map_err(|err| Error::new("depth image creation failure", err))?;
         self.framebuffers = Self::create_framebuffers(
             self.swapchain_images.as_slice(),
             self.render_pass.clone(),
             &mut self.dynamic_state,
+            &self.depth_image,
         )?;
+
         self.recreate_swapchain = false;
         Ok(())
     }
@@ -490,7 +542,7 @@ impl Renderer {
                         projection
                     },
                     model: Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians()),
-                    view: Mat4::look_at_rh(Vec3::new(1.0, 1.0, 1.0), Vec3::ZERO, Vec3::Z),
+                    view: Mat4::look_at_rh(Vec3::new(2.0, 2.0, 2.0), Vec3::ZERO, Vec3::Z),
                 }
             };
             builder
@@ -501,7 +553,10 @@ impl Renderer {
                 .map_err(|err| Error::new("transfer command buffer creation failure", err))?
         };
         let draw_command_buffer = {
-            let clear_values: Vec<ClearValue> = vec![[0.0, 0.0, 0.0, 1.0].into()];
+            let clear_values = vec![
+                ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
+                ClearValue::Depth(1.0),
+            ];
 
             let mut builder = AutoCommandBufferBuilder::primary(
                 self.device.clone(),
