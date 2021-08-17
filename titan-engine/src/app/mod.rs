@@ -36,13 +36,10 @@ impl Application {
             *control_flow = ControlFlow::Poll;
             let window = me.renderer.window();
             match event {
-                Event::NewEvents(cause) => match cause {
-                    StartCause::Init => {
-                        callback(MyEvent::Created);
-                        window.set_visible(true);
-                    }
-                    _ => (),
-                },
+                Event::NewEvents(StartCause::Init) => {
+                    callback(MyEvent::Created);
+                    window.set_visible(true);
+                }
                 Event::WindowEvent { event, window_id } if window_id == window.id() => {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,

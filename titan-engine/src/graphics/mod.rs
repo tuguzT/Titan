@@ -1,14 +1,15 @@
 use std::any::Any;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Instant;
 
-use glam::Vec2;
+use glam::{Mat4, Vec2, Vec3};
 use palette::Srgba;
-use vulkano::buffer::{BufferUsage, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
-    SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SubpassContents,
 };
+use vulkano::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::{ClearValue, Format};
@@ -18,7 +19,7 @@ use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::instance::{ApplicationInfo, Instance};
 use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
 use vulkano::swapchain::{AcquireError, ColorSpace, PresentMode, Surface, Swapchain};
 use vulkano::sync::{FlushError, GpuFuture, SharingMode};
@@ -33,8 +34,10 @@ use crate::{
     error::{Error, Result},
 };
 
+use self::camera::CameraUBO;
 use self::vertex::Vertex;
 
+mod camera;
 mod debug_callback;
 mod shader;
 mod utils;
@@ -57,7 +60,10 @@ lazy_static::lazy_static! {
 pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
+    start_time: Instant,
 
+    descriptor_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    uniform_buffers: Vec<Arc<CpuAccessibleBuffer<CameraUBO>>>,
     index_buffer: Arc<ImmutableBuffer<[u16]>>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
 
@@ -69,6 +75,7 @@ pub struct Renderer {
     swapchain: Arc<Swapchain<Window>>,
     graphics_queue: Arc<Queue>,
     present_queue: Arc<Queue>,
+    transfer_queue: Arc<Queue>,
     device: Arc<Device>,
     surface: Arc<Surface<Window>>,
     _debug_callback: Option<DebugCallback>,
@@ -135,7 +142,7 @@ impl Renderer {
             ..DeviceExtensions::none()
         };
         let required_features = Features::none();
-        let (physical_device, graphics_family, present_family) = physical_devices
+        let (physical_device, graphics_family, present_family, transfer_family) = physical_devices
             .filter(|device: &PhysicalDevice| {
                 let extensions = device.supported_extensions();
                 // All required extensions are supported by device
@@ -144,18 +151,21 @@ impl Renderer {
             .filter_map(|device| {
                 let graphics_family = device
                     .queue_families()
-                    .find(|&queue| queue.supports_graphics());
+                    .find(|queue| queue.supports_graphics());
                 let present_family = device
                     .queue_families()
                     .find(|&queue| surface.is_supported(queue).unwrap_or(false));
-                match (graphics_family, present_family) {
-                    (Some(graphics_family), Some(present_family)) => {
-                        Some((device, graphics_family, present_family))
+                let transfer_family = device
+                    .queue_families()
+                    .find(|queue| queue.explicitly_supports_transfers());
+                match (graphics_family, present_family, transfer_family) {
+                    (Some(graphics_family), Some(present_family), Some(transfer_family)) => {
+                        Some((device, graphics_family, present_family, transfer_family))
                     }
                     _ => None,
                 }
             })
-            .max_by_key(|(device, _, _)| {
+            .max_by_key(|(device, _, _, _)| {
                 let mut score = match device.properties().device_type {
                     PhysicalDeviceType::DiscreteGpu => 10000,
                     PhysicalDeviceType::IntegratedGpu => 1000,
@@ -177,10 +187,14 @@ impl Renderer {
         let (device, mut queues) = {
             let priorities = 1.0;
             let unique_queue_families = {
-                let unique_queue_families: HashSet<_> = [graphics_family.id(), present_family.id()]
-                    .iter()
-                    .cloned()
-                    .collect();
+                let unique_queue_families: HashSet<_> = [
+                    graphics_family.id(),
+                    present_family.id(),
+                    transfer_family.id(),
+                ]
+                .iter()
+                .cloned()
+                .collect();
                 unique_queue_families.into_iter().map(|family| {
                     (
                         physical_device.queue_family_by_id(family).unwrap(),
@@ -200,6 +214,7 @@ impl Renderer {
         };
         let graphics_queue = queues.next().unwrap();
         let present_queue = queues.next().unwrap_or_else(|| graphics_queue.clone());
+        let transfer_queue = queues.next().unwrap_or_else(|| graphics_queue.clone());
 
         let (swapchain, swapchain_images) = {
             let caps = surface
@@ -210,8 +225,7 @@ impl Renderer {
                 *formats
                     .iter()
                     .find(|(format, color_space)| {
-                        *format == Format::B8G8R8A8Srgb
-                            && *color_space == ColorSpace::SrgbNonLinear
+                        *format == Format::B8G8R8A8Srgb && *color_space == ColorSpace::SrgbNonLinear
                     })
                     .unwrap_or_else(|| &formats[0])
             };
@@ -292,7 +306,6 @@ impl Renderer {
                 .viewports_dynamic_scissors_irrelevant(1)
                 .depth_clamp(false)
                 .cull_mode_back()
-                .front_face_clockwise()
                 .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
                 .build(device.clone())
                 .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
@@ -331,7 +344,34 @@ impl Renderer {
             index_buffer
         };
 
+        let uniform_buffers = swapchain_images
+            .iter()
+            .map(|_| {
+                CpuAccessibleBuffer::from_data(
+                    device.clone(),
+                    BufferUsage::uniform_buffer_transfer_destination(),
+                    false,
+                    CameraUBO::default(),
+                )
+                .map_err(|err| Error::new("uniform buffer creation failure", err))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let descriptor_sets = uniform_buffers
+            .iter()
+            .map(|uniform_buffer| {
+                let layout = &graphics_pipeline.layout().descriptor_set_layouts()[0];
+                Ok(Arc::new(
+                    PersistentDescriptorSet::start(layout.clone())
+                        .add_buffer(uniform_buffer.clone())
+                        .map_err(|err| Error::new("descriptor set creation failure", err))?
+                        .build()
+                        .map_err(|err| Error::new("descriptor set creation failure", err))?,
+                ) as Arc<_>)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
         let previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+        let start_time = Instant::now();
         Ok(Self {
             _instance: instance,
             _debug_callback: debug_callback,
@@ -339,6 +379,7 @@ impl Renderer {
             device,
             graphics_queue,
             present_queue,
+            transfer_queue,
             swapchain,
             swapchain_images,
             render_pass,
@@ -347,6 +388,9 @@ impl Renderer {
             framebuffers,
             vertex_buffer,
             index_buffer,
+            uniform_buffers,
+            descriptor_sets,
+            start_time,
             previous_frame_end,
             recreate_swapchain: false,
         })
@@ -422,7 +466,41 @@ impl Renderer {
         self.recreate_swapchain = suboptimal;
 
         let framebuffer = self.framebuffers[image_index].clone();
-        let command_buffer: PrimaryAutoCommandBuffer = {
+
+        let transfer_command_buffer = {
+            let mut builder = AutoCommandBufferBuilder::primary(
+                self.device.clone(),
+                self.transfer_queue.family(),
+                CommandBufferUsage::OneTimeSubmit,
+            )
+            .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
+            let buffer = self.uniform_buffers[image_index].clone();
+            let ubo = {
+                let duration = Instant::now().duration_since(self.start_time);
+                let elapsed = duration.as_millis();
+                CameraUBO {
+                    projection: {
+                        let mut projection = Mat4::perspective_rh(
+                            45f32.to_radians(),
+                            (framebuffer.width() as f32) / (framebuffer.height() as f32),
+                            1.0,
+                            10.0,
+                        );
+                        projection.y_axis.y *= -1f32;
+                        projection
+                    },
+                    model: Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians()),
+                    view: Mat4::look_at_rh(Vec3::new(1.0, 1.0, 1.0), Vec3::ZERO, Vec3::Z),
+                }
+            };
+            builder
+                .update_buffer(buffer, Box::new(ubo))
+                .map_err(|err| Error::new("update buffer command creation failure", err))?;
+            builder
+                .build()
+                .map_err(|err| Error::new("transfer command buffer creation failure", err))?
+        };
+        let draw_command_buffer = {
             let clear_values: Vec<ClearValue> = vec![[0.0, 0.0, 0.0, 1.0].into()];
 
             let mut builder = AutoCommandBufferBuilder::primary(
@@ -430,7 +508,8 @@ impl Renderer {
                 self.graphics_queue.family(),
                 CommandBufferUsage::OneTimeSubmit,
             )
-            .map_err(|err| Error::new("command buffer creation failure", err))?;
+            .map_err(|err| Error::new("draw command buffer creation failure", err))?;
+            let descriptor_set = self.descriptor_sets[image_index].clone();
             builder
                 .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
                 .map_err(|err| Error::new("begin render pass failure", err))?
@@ -439,7 +518,7 @@ impl Renderer {
                     &self.dynamic_state,
                     self.vertex_buffer.clone(),
                     self.index_buffer.clone(),
-                    (),
+                    descriptor_set,
                     (),
                 )
                 .map_err(|err| Error::new("draw command failure", err))?
@@ -447,7 +526,7 @@ impl Renderer {
                 .map_err(|err| Error::new("end render pass failure", err))?;
             builder
                 .build()
-                .map_err(|err| Error::new("command buffer creation failure", err))?
+                .map_err(|err| Error::new("draw command buffer creation failure", err))?
         };
 
         let future = self
@@ -455,8 +534,11 @@ impl Renderer {
             .take()
             .unwrap()
             .join(acquire_future)
-            .then_execute(self.graphics_queue.clone(), command_buffer)
-            .map_err(|err| Error::new("command buffer cannot be submitted", err))?
+            .then_execute(self.transfer_queue.clone(), transfer_command_buffer)
+            .map_err(|err| Error::new("transfer command buffer execution failure", err))?
+            .then_signal_semaphore()
+            .then_execute(self.graphics_queue.clone(), draw_command_buffer)
+            .map_err(|err| Error::new("draw command buffer execution failure", err))?
             .then_swapchain_present(
                 self.present_queue.clone(),
                 self.swapchain.clone(),
