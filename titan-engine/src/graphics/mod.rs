@@ -10,7 +10,7 @@ use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SubpassContents,
 };
 use vulkano::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
-use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
+use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::{ClearValue, Format};
 use vulkano::image::view::ImageView;
@@ -118,42 +118,18 @@ impl Renderer {
             ..DeviceExtensions::none()
         };
         let required_features = Features::none();
-        let (physical_device, graphics_family, present_family, transfer_family) = physical_devices
-            .filter(|device| {
-                let extensions = device.supported_extensions();
-                let features = device.supported_features();
-                extensions.is_superset_of(&required_extensions)
-                    && features.is_superset_of(&required_features)
-            })
-            .filter_map(|device| {
-                let graphics_family = device
-                    .queue_families()
-                    .find(|queue| queue.supports_graphics());
-                let present_family = device
-                    .queue_families()
-                    .find(|&queue| surface.is_supported(queue).unwrap_or(false));
-                let transfer_family = device
-                    .queue_families()
-                    .find(|queue| queue.explicitly_supports_transfers());
-                match (graphics_family, present_family, transfer_family) {
-                    (Some(graphics_family), Some(present_family), Some(transfer_family)) => {
-                        Some((device, graphics_family, present_family, transfer_family))
-                    }
-                    _ => None,
-                }
-            })
-            .max_by_key(|(device, _, _, _)| {
-                let mut score = match device.properties().device_type {
-                    PhysicalDeviceType::DiscreteGpu => 10000,
-                    PhysicalDeviceType::IntegratedGpu => 1000,
-                    PhysicalDeviceType::VirtualGpu => 100,
-                    PhysicalDeviceType::Cpu => 10,
-                    PhysicalDeviceType::Other => 0,
-                };
-                score += device.properties().max_image_dimension2_d;
-                score
-            })
-            .ok_or_else(|| Error::from("no suitable physical device were found"))?;
+        let utils::SuitablePhysicalDevice {
+            physical_device,
+            graphics_family,
+            present_family,
+            transfer_family,
+        } = utils::suitable_physical_device(
+            physical_devices,
+            &surface,
+            &required_extensions,
+            &required_features,
+        )
+        .ok_or_else(|| Error::from("no suitable physical device were found"))?;
         log::info!(
             r#"using device "{}" of type "{:?}" with Vulkan version {}"#,
             physical_device.properties().device_name,
@@ -166,8 +142,8 @@ impl Renderer {
             let unique_queue_families = {
                 let unique_queue_families: HashSet<_> = [
                     graphics_family.id(),
-                    present_family.id(),
-                    transfer_family.id(),
+                    present_family.unwrap_or(graphics_family).id(),
+                    transfer_family.unwrap_or(graphics_family).id(),
                 ]
                 .iter()
                 .cloned()
@@ -179,12 +155,13 @@ impl Renderer {
                     )
                 })
             };
+            let required_extensions = physical_device
+                .required_extensions()
+                .union(&required_extensions);
             Device::new(
                 physical_device,
                 &required_features,
-                &physical_device
-                    .required_extensions()
-                    .union(&required_extensions),
+                &required_extensions,
                 unique_queue_families,
             )
             .map_err(|err| Error::new("device creation failure", err))?
@@ -232,7 +209,7 @@ impl Renderer {
                     image_count
                 }
             };
-            let sharing_mode = if graphics_family != present_family {
+            let sharing_mode = if present_family.is_some() {
                 let queues = [&graphics_queue, &present_queue];
                 SharingMode::from(&queues[..])
             } else {
@@ -263,7 +240,7 @@ impl Renderer {
                     let properties = format.properties(physical_device);
                     properties.optimal_tiling_features.depth_stencil_attachment
                 })
-                .unwrap_or_else(|| &Format::D16Unorm)
+                .unwrap_or(&Format::D16Unorm)
         };
         let depth_image = AttachmentImage::with_usage(
             device.clone(),
@@ -301,7 +278,7 @@ impl Renderer {
         );
 
         let graphics_pipeline = {
-            use self::shader::default::{vertex, fragment};
+            use self::shader::default::{fragment, vertex};
 
             let vert_shader_module = vertex::Shader::load(device.clone())
                 .map_err(|err| Error::new("vertex shader module creation failure", err))?;

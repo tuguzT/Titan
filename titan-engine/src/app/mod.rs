@@ -8,7 +8,7 @@ use crate::{
     config::Config,
     error::{Error, Result},
     graphics::Renderer,
-    window::Event as MyEvent,
+    window::{Event as MyEvent, Size},
 };
 
 pub struct Application {
@@ -44,12 +44,16 @@ impl Application {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(size) => {
-                            let size = (size.width, size.height);
+                            if size.width == 0 || size.height == 0 {
+                                callback(MyEvent::Resized(Size::new(0, 0)));
+                                return;
+                            }
                             if let Err(error) = me.renderer.resize() {
                                 log::error!("window resizing error: {}", error);
                                 *control_flow = ControlFlow::Exit;
                                 return;
                             }
+                            let size = (size.width, size.height);
                             callback(MyEvent::Resized(size.into()));
                         }
                         _ => (),
@@ -83,11 +87,19 @@ impl Application {
 /// This function could panic if invoked **not on main thread**.
 pub fn init(config: Config) -> Result<Application> {
     static FLAG: AtomicBool = AtomicBool::new(false);
+    const UNINITIALIZED: bool = false;
+    const INITIALIZED: bool = true;
 
-    if !FLAG
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .unwrap()
-    {
+    let initialized = FLAG
+        .compare_exchange(
+            UNINITIALIZED,
+            INITIALIZED,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        )
+        .unwrap();
+
+    if !initialized {
         Application::new(config)
     } else {
         Err(Error::from(
