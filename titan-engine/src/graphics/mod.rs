@@ -16,7 +16,7 @@ use vulkano::format::{ClearValue, Format};
 use vulkano::image::view::ImageView;
 use vulkano::image::{AttachmentImage, ImageAccess, ImageUsage, SwapchainImage};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
-use vulkano::instance::{ApplicationInfo, Instance};
+use vulkano::instance::Instance;
 use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
@@ -29,10 +29,8 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-use crate::{
-    config::{Config, ENGINE_NAME, ENGINE_VERSION},
-    error::{Error, Result},
-};
+use crate::config::Config;
+use crate::error::{Error, Result};
 
 use self::camera::CameraUBO;
 use self::vertex::Vertex;
@@ -42,8 +40,6 @@ mod debug_callback;
 mod shader;
 mod utils;
 mod vertex;
-
-const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 const fn indices() -> [u16; 12] {
     [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4]
@@ -55,7 +51,6 @@ fn vertices() -> [Vertex; 8] {
         Vertex::new(Vec3::new(0.5, -0.5, 0.0), Srgba::new(0.0, 1.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, 0.5, 0.0), Srgba::new(0.0, 0.0, 1.0, 1.0)),
         Vertex::new(Vec3::new(-0.5, 0.5, 0.0), Srgba::new(1.0, 1.0, 1.0, 1.0)),
-
         Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Srgba::new(1.0, 0.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, -0.5, -0.5), Srgba::new(0.0, 1.0, 0.0, 1.0)),
         Vertex::new(Vec3::new(0.5, 0.5, -0.5), Srgba::new(0.0, 0.0, 1.0, 1.0)),
@@ -91,42 +86,21 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(config: &Config, event_loop: &EventLoop<impl Any>) -> Result<Self> {
-        let instance = {
-            let info = ApplicationInfo {
-                application_name: Some(config.name().into()),
-                application_version: Some(utils::to_vk_version(config.version())),
-                engine_name: Some(ENGINE_NAME.into()),
-                engine_version: Some(utils::to_vk_version(&*ENGINE_VERSION)),
-            };
-            let extensions = {
-                let mut extensions = vulkano_win::required_extensions();
-                if ENABLE_VALIDATION {
-                    extensions.ext_debug_utils = true;
-                }
-                extensions
-            };
-            let layers = ENABLE_VALIDATION.then(|| "VK_LAYER_KHRONOS_validation");
-            Instance::new(Some(&info), vulkano::Version::V1_2, &extensions, layers)
-                .map_err(|err| Error::new("instance creation failure", err))
-        }?;
+        let instance = utils::create_instance(config)?;
         log::info!(
             "max version of Vulkan instance is {}",
             instance.max_api_version(),
         );
 
-        let debug_callback = if ENABLE_VALIDATION {
-            let debug_callback = DebugCallback::new(
-                &instance,
-                MessageSeverity::all(),
-                MessageType::all(),
-                self::debug_callback::callback,
-            )
-            .map_err(|err| Error::new("debug callback creation failure", err))?;
-            log::info!("debug callback was attached to the instance");
-            Some(debug_callback)
-        } else {
-            None
-        };
+        let debug_callback = config
+            .enable_validation()
+            .then(|| {
+                use self::debug_callback::create_debug_callback as new;
+                let debug_callback = new(&instance, MessageSeverity::all(), MessageType::all())?;
+                log::info!("debug callback was attached to the instance");
+                Result::Ok(debug_callback)
+            })
+            .transpose()?;
 
         let surface = WindowBuilder::new()
             .with_title(config.name())
@@ -145,9 +119,11 @@ impl Renderer {
         };
         let required_features = Features::none();
         let (physical_device, graphics_family, present_family, transfer_family) = physical_devices
-            .filter(|device: &PhysicalDevice| {
+            .filter(|device| {
                 let extensions = device.supported_extensions();
+                let features = device.supported_features();
                 extensions.is_superset_of(&required_extensions)
+                    && features.is_superset_of(&required_features)
             })
             .filter_map(|device| {
                 let graphics_family = device
@@ -239,26 +215,28 @@ impl Renderer {
                 current_extent
             } else {
                 let window_size = surface.window().inner_size();
+                let min_width = caps.min_image_extent[0];
+                let max_width = caps.max_image_extent[0];
+                let min_height = caps.min_image_extent[1];
+                let max_height = caps.max_image_extent[1];
                 [
-                    window_size
-                        .width
-                        .clamp(caps.min_image_extent[0], caps.max_image_extent[0]),
-                    window_size
-                        .height
-                        .clamp(caps.min_image_extent[1], caps.max_image_extent[1]),
+                    window_size.width.clamp(min_width, max_width),
+                    window_size.height.clamp(min_height, max_height),
                 ]
             };
             let image_count = {
-                let mut image_count = caps.min_image_count + 1;
-                if caps.max_image_count.is_some() && image_count > caps.max_image_count.unwrap() {
-                    image_count = caps.max_image_count.unwrap();
+                let image_count = caps.min_image_count + 1;
+                if let Some(max_image_count) = caps.max_image_count {
+                    image_count.max(max_image_count)
+                } else {
+                    image_count
                 }
-                image_count
             };
-            let sharing_mode: SharingMode = if graphics_family != present_family {
-                vec![&graphics_queue, &present_queue].as_slice().into()
+            let sharing_mode = if graphics_family != present_family {
+                let queues = [&graphics_queue, &present_queue];
+                SharingMode::from(&queues[..])
             } else {
-                (&graphics_queue).into()
+                SharingMode::from(&graphics_queue)
             };
             Swapchain::start(device.clone(), surface.clone())
                 .format(format)
@@ -285,7 +263,7 @@ impl Renderer {
                     let properties = format.properties(physical_device);
                     properties.optimal_tiling_features.depth_stencil_attachment
                 })
-                .unwrap_or(&Format::D16Unorm)
+                .unwrap_or_else(|| &Format::D16Unorm)
         };
         let depth_image = AttachmentImage::with_usage(
             device.clone(),
@@ -322,25 +300,29 @@ impl Renderer {
             .map_err(|err| Error::new("render pass creation failure", err))?,
         );
 
-        use self::shader::default as shader;
-        let vert_shader_module = shader::vertex::Shader::load(device.clone())
-            .map_err(|err| Error::new("vertex shader module creation failure", err))?;
-        let frag_shader_module = shader::fragment::Shader::load(device.clone())
-            .map_err(|err| Error::new("fragment shader module creation failure", err))?;
-        let graphics_pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer::<Vertex>()
-                .vertex_shader(vert_shader_module.main_entry_point(), ())
-                .fragment_shader(frag_shader_module.main_entry_point(), ())
-                .triangle_list()
-                .primitive_restart(false)
-                .viewports_dynamic_scissors_irrelevant(1)
-                .depth_stencil_simple_depth()
-                .cull_mode_back()
-                .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-                .build(device.clone())
-                .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
-        );
+        let graphics_pipeline = {
+            use self::shader::default::{vertex, fragment};
+
+            let vert_shader_module = vertex::Shader::load(device.clone())
+                .map_err(|err| Error::new("vertex shader module creation failure", err))?;
+            let frag_shader_module = fragment::Shader::load(device.clone())
+                .map_err(|err| Error::new("fragment shader module creation failure", err))?;
+
+            Arc::new(
+                GraphicsPipeline::start()
+                    .vertex_input_single_buffer::<Vertex>()
+                    .vertex_shader(vert_shader_module.main_entry_point(), ())
+                    .fragment_shader(frag_shader_module.main_entry_point(), ())
+                    .triangle_list()
+                    .primitive_restart(false)
+                    .viewports_dynamic_scissors_irrelevant(1)
+                    .depth_stencil_simple_depth()
+                    .cull_mode_back()
+                    .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+                    .build(device.clone())
+                    .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
+            )
+        };
 
         let mut dynamic_state = DynamicState::none();
         let framebuffers = Self::create_framebuffers(
@@ -582,10 +564,8 @@ impl Renderer {
                 .map_err(|err| Error::new("draw command buffer creation failure", err))?
         };
 
-        let future = self
-            .previous_frame_end
-            .take()
-            .unwrap()
+        let previous_frame_end = self.previous_frame_end.take().unwrap();
+        let future = previous_frame_end
             .join(acquire_future)
             .then_execute(self.transfer_queue.clone(), transfer_command_buffer)
             .map_err(|err| Error::new("transfer command buffer execution failure", err))?

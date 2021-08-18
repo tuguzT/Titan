@@ -15,7 +15,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     log::info!("logger initialized successfully");
 
     let version = APP_VERSION_STR.parse()?;
-    let config = Config::new(APP_NAME.to_string(), version);
+    let enable_validation = cfg!(debug_assertions);
+    let config = Config::new(APP_NAME.to_string(), version, enable_validation);
+
     let application = titan_engine::init(config)?;
     application.run(move |event| match event {
         Event::Created => {
