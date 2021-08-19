@@ -1,5 +1,5 @@
-use glam::Vec3;
 use palette::Srgba;
+use ultraviolet::Vec3;
 use vulkano::pipeline::vertex::{VertexMember, VertexMemberTy};
 
 #[derive(Default, Copy, Clone)]

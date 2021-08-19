@@ -1,10 +1,12 @@
-use glam::Mat4;
+#![allow(dead_code)]
 
-#[derive(Copy, Clone)]
+use ultraviolet::Mat4;
+
+#[derive(Default, Copy, Clone)]
 pub struct CameraUBO {
-    pub projection: Mat4,
-    pub model: Mat4,
-    pub view: Mat4,
+    projection: Mat4,
+    model: Mat4,
+    view: Mat4,
 }
 
 impl CameraUBO {
@@ -15,10 +17,16 @@ impl CameraUBO {
             view,
         }
     }
-}
 
-impl Default for CameraUBO {
-    fn default() -> Self {
-        Self::new(Mat4::IDENTITY, Mat4::IDENTITY, Mat4::IDENTITY)
+    pub fn projection(&self) -> Mat4 {
+        self.projection
+    }
+
+    pub fn model(&self) -> Mat4 {
+        self.model
+    }
+
+    pub fn view(&self) -> Mat4 {
+        self.view
     }
 }

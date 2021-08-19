@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
-use glam::{Mat4, Vec3};
 use palette::Srgba;
+use ultraviolet::{Mat4, Vec3};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SubpassContents,
@@ -480,20 +480,17 @@ impl Renderer {
             let ubo = {
                 let duration = Instant::now().duration_since(self.start_time);
                 let elapsed = duration.as_millis();
-                Box::new(CameraUBO {
-                    projection: {
-                        let mut projection = Mat4::perspective_rh(
-                            45f32.to_radians(),
-                            (framebuffer.width() as f32) / (framebuffer.height() as f32),
-                            1.0,
-                            10.0,
-                        );
-                        projection.y_axis.y *= -1f32;
-                        projection
-                    },
-                    model: Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians()),
-                    view: Mat4::look_at_rh(Vec3::new(2.0, 2.0, 2.0), Vec3::ZERO, Vec3::Z),
-                })
+
+                use ultraviolet::projection::perspective_vk as perspective;
+                let projection = perspective(
+                    45f32.to_radians(),
+                    (framebuffer.width() as f32) / (framebuffer.height() as f32),
+                    1.0,
+                    10.0,
+                );
+                let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
+                let view = Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
+                Box::new(CameraUBO::new(projection, model, view))
             };
 
             let mut builder = AutoCommandBufferBuilder::primary(
