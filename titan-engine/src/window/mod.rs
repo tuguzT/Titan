@@ -1,6 +1,9 @@
+use crate::app::DeltaTime;
+
 pub enum Event {
     Created,
     Resized(Size),
+    Update(DeltaTime),
     Destroyed,
 }
 

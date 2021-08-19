@@ -1,15 +1,20 @@
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
+use ultraviolet::{Mat4, Vec3};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::graphics::camera::CameraUBO;
 use crate::{
     config::Config,
     error::{Error, Result},
     graphics::Renderer,
     window::{Event as MyEvent, Size},
 };
+
+pub type DeltaTime = Duration;
 
 pub struct Application {
     _config: Config,
@@ -31,12 +36,15 @@ impl Application {
     pub fn run(mut self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
         let event_loop = self.event_loop.take().unwrap();
         let mut me = ManuallyDrop::new(self);
+        let mut start_time = Instant::now();
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             let window = me.renderer.window();
+            let size = window.inner_size();
             match event {
                 Event::NewEvents(StartCause::Init) => {
+                    start_time = Instant::now();
                     callback(MyEvent::Created);
                     window.set_visible(true);
                 }
@@ -60,14 +68,37 @@ impl Application {
                     }
                 }
                 Event::MainEventsCleared => {
-                    let size = window.inner_size();
                     if size.width == 0 || size.height == 0 {
                         return;
                     }
+
+                    let frame_start = Instant::now();
                     if let Err(error) = me.renderer.render() {
                         log::error!("rendering error: {}", error);
                         *control_flow = ControlFlow::Exit;
+                        return;
                     }
+                    let frame_end = Instant::now();
+                    let delta_time = frame_end.duration_since(frame_start);
+                    callback(MyEvent::Update(delta_time));
+
+                    let ubo = {
+                        let duration = Instant::now().duration_since(start_time);
+                        let elapsed = duration.as_millis();
+
+                        use ultraviolet::projection::perspective_vk as perspective;
+                        let projection = perspective(
+                            45f32.to_radians(),
+                            (size.width as f32) / (size.height as f32),
+                            1.0,
+                            10.0,
+                        );
+                        let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
+                        let view =
+                            Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
+                        CameraUBO::new(projection, model, view)
+                    };
+                    me.renderer.set_camera_ubo(ubo);
                 }
                 Event::LoopDestroyed => {
                     callback(MyEvent::Destroyed);

@@ -1,10 +1,9 @@
 use std::any::Any;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Instant;
 
 use palette::Srgba;
-use ultraviolet::{Mat4, Vec3};
+use ultraviolet::Vec3;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
@@ -36,7 +35,7 @@ use crate::error::{Error, Result};
 use self::camera::CameraUBO;
 use self::vertex::Vertex;
 
-mod camera;
+pub mod camera;
 mod debug_callback;
 mod shader;
 mod utils;
@@ -62,7 +61,7 @@ fn vertices() -> [Vertex; 8] {
 pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
-    start_time: Instant,
+    camera_ubo: CameraUBO,
 
     descriptor_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
     uniform_buffers: Vec<Arc<CpuAccessibleBuffer<CameraUBO>>>,
@@ -363,7 +362,6 @@ impl Renderer {
             .collect::<Result<Vec<_>>>()?;
 
         let previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
-        let start_time = Instant::now();
         Ok(Self {
             _instance: instance,
             _debug_callback: debug_callback,
@@ -383,7 +381,7 @@ impl Renderer {
             index_buffer,
             uniform_buffers,
             descriptor_sets,
-            start_time,
+            camera_ubo: CameraUBO::default(),
             previous_frame_end,
             recreate_swapchain: false,
         })
@@ -457,26 +455,12 @@ impl Renderer {
         Ok(())
     }
 
-    fn update_camera_ubo(&self) -> Box<CameraUBO> {
-        let duration = Instant::now().duration_since(self.start_time);
-        let elapsed = duration.as_millis();
-        let size = self.window().inner_size();
-
-        use ultraviolet::projection::perspective_vk as perspective;
-        let projection = perspective(
-            45f32.to_radians(),
-            (size.width as f32) / (size.height as f32),
-            1.0,
-            10.0,
-        );
-        let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
-        let view = Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
-        Box::new(CameraUBO::new(projection, model, view))
+    pub fn set_camera_ubo(&mut self, ubo: CameraUBO) {
+        self.camera_ubo = ubo;
     }
 
     fn transfer_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
         let uniform_buffer = self.uniform_buffers[image_index].clone();
-        let ubo = self.update_camera_ubo();
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.device.clone(),
@@ -485,7 +469,7 @@ impl Renderer {
         )
         .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
         builder
-            .update_buffer(uniform_buffer, ubo)
+            .update_buffer(uniform_buffer, Box::new(self.camera_ubo))
             .map_err(|err| Error::new("update buffer command creation failure", err))?;
         Ok(builder
             .build()

@@ -30,5 +30,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         Event::Destroyed => {
             log::debug!("destroyed");
         }
+        Event::Update(delta_time) => {
+            log::debug!("delta time: {:?}", delta_time);
+        }
     })
 }
