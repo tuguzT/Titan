@@ -6,11 +6,10 @@ use ultraviolet::{Mat4, Vec3};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::graphics::camera::CameraUBO;
 use crate::{
     config::Config,
     error::{Error, Result},
-    graphics::Renderer,
+    graphics::{Renderer, camera::CameraUBO},
     window::{Event as MyEvent, Size},
 };
 
