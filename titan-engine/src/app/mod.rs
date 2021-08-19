@@ -45,7 +45,7 @@ impl Application {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(size) => {
                             if size.width == 0 || size.height == 0 {
-                                callback(MyEvent::Resized(Size::new(0, 0)));
+                                callback(MyEvent::Resized(Size::default()));
                                 return;
                             }
                             if let Err(error) = me.renderer.resize() {

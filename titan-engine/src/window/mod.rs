@@ -4,6 +4,7 @@ pub enum Event {
     Destroyed,
 }
 
+#[derive(Default, Copy, Clone)]
 pub struct Size {
     pub width: u32,
     pub height: u32,

@@ -7,7 +7,8 @@ use palette::Srgba;
 use ultraviolet::{Mat4, Vec3};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
+    SubpassContents,
 };
 use vulkano::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::physical::PhysicalDevice;
@@ -311,7 +312,7 @@ impl Renderer {
 
         let vertex_buffer = {
             let (vertex_buffer, future) = ImmutableBuffer::from_iter(
-                vertices().iter().cloned(),
+                self::vertices().iter().cloned(),
                 BufferUsage::vertex_buffer(),
                 graphics_queue.clone(),
             )
@@ -324,7 +325,7 @@ impl Renderer {
 
         let index_buffer = {
             let (index_buffer, future) = ImmutableBuffer::from_iter(
-                indices().iter().cloned(),
+                self::indices().iter().cloned(),
                 BufferUsage::index_buffer(),
                 graphics_queue.clone(),
             )
@@ -456,6 +457,74 @@ impl Renderer {
         Ok(())
     }
 
+    fn update_camera_ubo(&self) -> Box<CameraUBO> {
+        let duration = Instant::now().duration_since(self.start_time);
+        let elapsed = duration.as_millis();
+        let size = self.window().inner_size();
+
+        use ultraviolet::projection::perspective_vk as perspective;
+        let projection = perspective(
+            45f32.to_radians(),
+            (size.width as f32) / (size.height as f32),
+            1.0,
+            10.0,
+        );
+        let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
+        let view = Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
+        Box::new(CameraUBO::new(projection, model, view))
+    }
+
+    fn transfer_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
+        let uniform_buffer = self.uniform_buffers[image_index].clone();
+        let ubo = self.update_camera_ubo();
+
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.device.clone(),
+            self.transfer_queue.family(),
+            CommandBufferUsage::OneTimeSubmit,
+        )
+        .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
+        builder
+            .update_buffer(uniform_buffer, ubo)
+            .map_err(|err| Error::new("update buffer command creation failure", err))?;
+        Ok(builder
+            .build()
+            .map_err(|err| Error::new("transfer command buffer creation failure", err))?)
+    }
+
+    fn draw_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
+        let framebuffer = self.framebuffers[image_index].clone();
+        let clear_values = vec![
+            ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
+            ClearValue::Depth(1.0),
+        ];
+        let descriptor_set = self.descriptor_sets[image_index].clone();
+
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.device.clone(),
+            self.graphics_queue.family(),
+            CommandBufferUsage::OneTimeSubmit,
+        )
+        .map_err(|err| Error::new("draw command buffer creation failure", err))?;
+        builder
+            .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
+            .map_err(|err| Error::new("begin render pass failure", err))?
+            .draw_indexed(
+                self.graphics_pipeline.clone(),
+                &self.dynamic_state,
+                self.vertex_buffer.clone(),
+                self.index_buffer.clone(),
+                descriptor_set,
+                (),
+            )
+            .map_err(|err| Error::new("draw command failure", err))?
+            .end_render_pass()
+            .map_err(|err| Error::new("end render pass failure", err))?;
+        Ok(builder
+            .build()
+            .map_err(|err| Error::new("draw command buffer creation failure", err))?)
+    }
+
     pub fn render(&mut self) -> Result<()> {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
         if self.recreate_swapchain {
@@ -473,72 +542,10 @@ impl Renderer {
             };
         self.recreate_swapchain = suboptimal;
 
-        let framebuffer = self.framebuffers[image_index].clone();
-
-        let transfer_command_buffer = {
-            let uniform_buffer = self.uniform_buffers[image_index].clone();
-            let ubo = {
-                let duration = Instant::now().duration_since(self.start_time);
-                let elapsed = duration.as_millis();
-
-                use ultraviolet::projection::perspective_vk as perspective;
-                let projection = perspective(
-                    45f32.to_radians(),
-                    (framebuffer.width() as f32) / (framebuffer.height() as f32),
-                    1.0,
-                    10.0,
-                );
-                let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
-                let view = Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
-                Box::new(CameraUBO::new(projection, model, view))
-            };
-
-            let mut builder = AutoCommandBufferBuilder::primary(
-                self.device.clone(),
-                self.transfer_queue.family(),
-                CommandBufferUsage::OneTimeSubmit,
-            )
-            .map_err(|err| Error::new("transfer command buffer creation failure", err))?;
-            builder
-                .update_buffer(uniform_buffer, ubo)
-                .map_err(|err| Error::new("update buffer command creation failure", err))?;
-            builder
-                .build()
-                .map_err(|err| Error::new("transfer command buffer creation failure", err))?
-        };
-        let draw_command_buffer = {
-            let clear_values = vec![
-                ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
-                ClearValue::Depth(1.0),
-            ];
-            let descriptor_set = self.descriptor_sets[image_index].clone();
-
-            let mut builder = AutoCommandBufferBuilder::primary(
-                self.device.clone(),
-                self.graphics_queue.family(),
-                CommandBufferUsage::OneTimeSubmit,
-            )
-            .map_err(|err| Error::new("draw command buffer creation failure", err))?;
-            builder
-                .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
-                .map_err(|err| Error::new("begin render pass failure", err))?
-                .draw_indexed(
-                    self.graphics_pipeline.clone(),
-                    &self.dynamic_state,
-                    self.vertex_buffer.clone(),
-                    self.index_buffer.clone(),
-                    descriptor_set,
-                    (),
-                )
-                .map_err(|err| Error::new("draw command failure", err))?
-                .end_render_pass()
-                .map_err(|err| Error::new("end render pass failure", err))?;
-            builder
-                .build()
-                .map_err(|err| Error::new("draw command buffer creation failure", err))?
-        };
-
+        let transfer_command_buffer = self.transfer_cb(image_index)?;
+        let draw_command_buffer = self.draw_cb(image_index)?;
         let previous_frame_end = self.previous_frame_end.take().unwrap();
+
         let future = previous_frame_end
             .join(acquire_future)
             .then_execute(self.transfer_queue.clone(), transfer_command_buffer)
