@@ -9,7 +9,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use crate::{
     config::Config,
     error::{Error, Result},
-    graphics::{Renderer, camera::CameraUBO},
+    graphics::{camera::CameraUBO, Renderer},
     window::{Event as MyEvent, Size},
 };
 

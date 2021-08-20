@@ -17,6 +17,7 @@ pub fn create_debug_callback(
     Ok(debug_callback)
 }
 
+#[rustfmt::skip]
 fn user_callback(message: &Message) {
     let level = match message.severity {
         MessageSeverity { verbose: true, .. } => Level::Trace,

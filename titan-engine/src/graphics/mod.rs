@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -35,7 +34,8 @@ use crate::error::{Error, Result};
 use self::camera::CameraUBO;
 use self::vertex::Vertex;
 
-pub mod camera;
+pub(crate) mod camera;
+
 mod debug_callback;
 mod shader;
 mod utils;
@@ -85,7 +85,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(config: &Config, event_loop: &EventLoop<impl Any>) -> Result<Self> {
+    pub fn new<T>(config: &Config, event_loop: &EventLoop<T>) -> Result<Self>
+    where
+        T: 'static,
+    {
         let instance = utils::create_instance(config)?;
         log::info!(
             "max version of Vulkan instance is {}",
@@ -478,7 +481,7 @@ impl Renderer {
 
     fn draw_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
         let framebuffer = self.framebuffers[image_index].clone();
-        let clear_values = vec![
+        let clear_values = [
             ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
             ClearValue::Depth(1.0),
         ];
