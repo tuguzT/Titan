@@ -31,11 +31,20 @@ unsafe impl VertexMember for Color {
 
 vulkano::impl_vertex!(Vertex, position, color);
 
+#[allow(dead_code)]
 impl Vertex {
     pub fn new(position: Vec3, color: Srgba) -> Self {
         Self {
             position: Position(position),
             color: Color(color),
         }
+    }
+
+    pub fn position(&self) -> Vec3 {
+        self.position.0
+    }
+
+    pub fn color(&self) -> Srgba {
+        self.color.0
     }
 }
