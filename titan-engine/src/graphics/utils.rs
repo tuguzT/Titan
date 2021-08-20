@@ -1,3 +1,5 @@
+//! General graphics utilities for game engine.
+
 use std::sync::Arc;
 
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily};
@@ -10,6 +12,7 @@ use winit::window::Window;
 use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
 use crate::error::{Error, Result};
 
+/// Convert `semver` Version struct into `vulkano` Version struct.
 #[inline]
 const fn to_vk_version(version: &semver::Version) -> vulkano::Version {
     vulkano::Version {
@@ -19,6 +22,11 @@ const fn to_vk_version(version: &semver::Version) -> vulkano::Version {
     }
 }
 
+/// Create instance of Vulkan (with low-level vkInstance handle).
+///
+/// Will enable `VK_EXT_debug_utils` extension if
+/// validation is enabled by config.
+///
 pub fn create_instance(config: &Config) -> Result<Arc<Instance>> {
     let info = ApplicationInfo {
         application_name: Some(config.name().into()),
@@ -47,6 +55,8 @@ impl From<InstanceCreationError> for Error {
     }
 }
 
+/// Internal struct for representing suitable physical device
+/// with its queue families.
 pub struct SuitablePhysicalDevice<'a> {
     pub physical_device: PhysicalDevice<'a>,
     pub graphics_family: QueueFamily<'a>,
@@ -54,6 +64,10 @@ pub struct SuitablePhysicalDevice<'a> {
     pub transfer_family: Option<QueueFamily<'a>>,
 }
 
+/// Filter suitable physical device from all of them.
+///
+/// Will check for provided extensions and features support.
+///
 pub fn suitable_physical_device<'a>(
     physical_devices: impl ExactSizeIterator<Item = PhysicalDevice<'a>>,
     surface: &Arc<Surface<Window>>,
@@ -106,7 +120,8 @@ pub fn suitable_physical_device<'a>(
         .max_by_key(|suitable| self::score(&suitable.physical_device))
 }
 
-pub fn score(physical_device: &PhysicalDevice) -> u32 {
+/// Calculates internal score of given physical device.
+fn score(physical_device: &PhysicalDevice) -> u32 {
     let properties = physical_device.properties();
     let mut score = match properties.device_type {
         PhysicalDeviceType::DiscreteGpu => 10000,

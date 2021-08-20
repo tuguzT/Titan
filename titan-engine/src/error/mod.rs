@@ -1,8 +1,15 @@
+//! Utilities for error handling.
+
 use std::error::Error as StdError;
 use std::fmt;
 
+/// Result of any operation which can return an error.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// General error type of game engine.
+///
+/// Contains general message and source of error, if any.
+///
 #[derive(Debug)]
 pub struct Error {
     message: String,
@@ -10,7 +17,12 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(message: &str, source: impl StdError + 'static) -> Self {
+    /// Creates new error with specified message and source of error.
+    pub fn new<T, E>(message: T, source: E) -> Self
+    where
+        T: ToString,
+        E: StdError + 'static,
+    {
         Self {
             message: message.to_string(),
             source: Some(Box::new(source)),
@@ -37,8 +49,14 @@ impl StdError for Error {
 
 impl From<&str> for Error {
     fn from(message: &str) -> Self {
+        Self::from(message.to_string())
+    }
+}
+
+impl From<String> for Error {
+    fn from(message: String) -> Self {
         Self {
-            message: message.to_string(),
+            message,
             source: None,
         }
     }

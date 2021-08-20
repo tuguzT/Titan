@@ -1,3 +1,5 @@
+//! Graphics utilities and backend based on Vulkan API for game engine.
+
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -58,6 +60,8 @@ fn vertices() -> [Vertex; 8] {
     ]
 }
 
+/// System that renders all game objects and UI.
+// TODO: UI rendering
 pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
@@ -85,6 +89,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Creates render system.
     pub fn new<T>(config: &Config, event_loop: &EventLoop<T>) -> Result<Self>
     where
         T: 'static,
@@ -390,6 +395,7 @@ impl Renderer {
         })
     }
 
+    /// (Re)create framebuffers in which game content will be rendered.
     fn create_framebuffers(
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<RenderPass>,
@@ -424,10 +430,12 @@ impl Renderer {
             .collect()
     }
 
+    /// Underlying window of render system.
     pub fn window(&self) -> &Window {
         self.surface.window()
     }
 
+    /// Resize the underlying window and update Vulkan objects.
     pub fn resize(&mut self) -> Result<()> {
         let dimensions = self.window().inner_size().into();
 
@@ -462,6 +470,8 @@ impl Renderer {
         self.camera_ubo = ubo;
     }
 
+    /// Create command buffer for transfer operations which will be executed
+    /// before actual rendering.
     fn transfer_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
         let uniform_buffer = self.uniform_buffers[image_index].clone();
 
@@ -479,6 +489,7 @@ impl Renderer {
             .map_err(|err| Error::new("transfer command buffer creation failure", err))?)
     }
 
+    /// Create command buffer for actual rendering operations.
     fn draw_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
         let framebuffer = self.framebuffers[image_index].clone();
         let clear_values = [
@@ -512,6 +523,7 @@ impl Renderer {
             .map_err(|err| Error::new("draw command buffer creation failure", err))?)
     }
 
+    /// Render new frame into the underlying window.
     pub fn render(&mut self) -> Result<()> {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
         if self.recreate_swapchain {

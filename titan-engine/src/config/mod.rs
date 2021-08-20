@@ -1,5 +1,8 @@
+//! Configuration utilities for game engine and your game.
+
 use semver::Version;
 
+/// This struct represents general configuration of game engine.
 #[derive(Debug, Clone)]
 pub struct Config {
     name: String,
@@ -15,6 +18,7 @@ lazy_static::lazy_static! {
 }
 
 impl Config {
+    /// Creates new configuration with given name, version and validation usage.
     pub const fn new(name: String, version: Version, enable_validation: bool) -> Self {
         Self {
             name,
@@ -23,14 +27,17 @@ impl Config {
         }
     }
 
+    /// Name of your game.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Semver version of your game.
     pub fn version(&self) -> &Version {
         &self.version
     }
 
+    /// If game will use validation (useful for debugging).
     pub fn enable_validation(&self) -> bool {
         self.enable_validation
     }

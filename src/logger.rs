@@ -1,3 +1,5 @@
+//! Module provides initialization of global application logger
+
 use std::error::Error;
 
 use chrono::{Local, SecondsFormat};
@@ -8,10 +10,14 @@ use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::Handle;
 
+/// Initializes the global logger for an application.
+///
+/// # Errors
+/// An error is returned if logger has already been initialized.
+///
 pub fn init() -> Result<Handle, impl Error> {
-    let encoder = Box::new(PatternEncoder::new(
-        "{d:<35} [thread \"{T}\" id {({I}]):<6} {l:<5} {t} >> {m}{n}",
-    ));
+    let pattern = "{d:<35} [thread \"{T}\" id {({I}]):<6} {l:<5} {t} >> {m}{n}";
+    let encoder = Box::new(PatternEncoder::new(pattern));
 
     let stdout = ConsoleAppender::builder().encoder(encoder.clone()).build();
     let file_name = format!(

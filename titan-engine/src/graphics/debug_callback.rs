@@ -1,3 +1,5 @@
+//! Graphics debugging utilities for game engine.
+
 use std::sync::Arc;
 
 use log::Level;
@@ -8,6 +10,10 @@ use vulkano::instance::Instance;
 
 use crate::error::{Error, Result};
 
+/// Create debug callback for validation via Vulkan SDK.
+///
+/// Note that Khronos validation layer must be enabled.
+///
 pub fn create_debug_callback(
     instance: &Arc<Instance>,
     severity: MessageSeverity,
@@ -17,6 +23,10 @@ pub fn create_debug_callback(
     Ok(debug_callback)
 }
 
+/// The actual callback validation function.
+///
+/// Logs message into global logger.
+///
 #[rustfmt::skip]
 fn user_callback(message: &Message) {
     let level = match message.severity {

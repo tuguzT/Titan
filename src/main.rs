@@ -1,3 +1,5 @@
+//! Simple game engine based on Rust and Vulkan API
+
 #![windows_subsystem = "windows"]
 
 use std::error::Error;
@@ -10,6 +12,7 @@ mod logger;
 const APP_NAME: &str = env!("CARGO_CRATE_NAME", "library must be compiled by Cargo");
 const APP_VERSION_STR: &str = env!("CARGO_PKG_VERSION", "library must be compiled by Cargo");
 
+/// Entry point of `titan-rs` game engine
 fn main() -> Result<(), Box<dyn Error>> {
     let _handle = logger::init().unwrap();
     log::info!("logger initialized successfully");

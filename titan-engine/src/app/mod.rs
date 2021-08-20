@@ -1,3 +1,5 @@
+//! Module provides utilities for engine initialization.
+
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -13,8 +15,14 @@ use crate::{
     window::{Event as MyEvent, Size},
 };
 
+/// Type which represents duration between render frames.
 pub type DeltaTime = Duration;
 
+/// General context of game engine.
+///
+/// Can be created using [`init`] function.
+///
+/// [`init`]: fn.init.html
 pub struct Application {
     _config: Config,
     renderer: Renderer,
@@ -32,11 +40,15 @@ impl Application {
         })
     }
 
-    pub fn run(mut self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
-        let event_loop = self.event_loop.take().unwrap();
+    /// Starts execution of game engine.
+    ///
+    /// This function **will not** return any value.
+    ///
+    pub fn run(self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
         let mut me = ManuallyDrop::new(self);
-        let mut start_time = Instant::now();
+        let event_loop = me.event_loop.take().unwrap();
 
+        let mut start_time = Instant::now();
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             let window = me.renderer.window();
@@ -110,11 +122,18 @@ impl Application {
     }
 }
 
-/// Creates a unique application instance.
-/// If application instance was created earlier, it will return an error.
+/// Creates a unique [`Application`] instance.
+/// If application instance was created earlier, function call will return an error.
 ///
-///     Panic
+/// # Errors
+///
+/// An error is returned if application instance have already been initialized.
+///
+/// # Panic
+///
 /// This function could panic if invoked **not on main thread**.
+///
+/// [`Application`]: struct.Application.html
 pub fn init(config: Config) -> Result<Application> {
     static FLAG: AtomicBool = AtomicBool::new(false);
     const UNINITIALIZED: bool = false;
@@ -132,8 +151,7 @@ pub fn init(config: Config) -> Result<Application> {
     if !initialized {
         Application::new(config)
     } else {
-        Err(Error::from(
-            "cannot create more than one application instance",
-        ))
+        let message = "cannot create more than one application instance";
+        Err(Error::from(message))
     }
 }
