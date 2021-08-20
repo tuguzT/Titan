@@ -1,4 +1,4 @@
-//! Module provides utilities for engine initialization.
+//! Utilities for engine initialization.
 
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +15,7 @@ use crate::{
     window::{Event as MyEvent, Size},
 };
 
-/// Type which represents duration between render frames.
+/// Type which represents duration between two frames.
 pub type DeltaTime = Duration;
 
 /// General context of game engine.

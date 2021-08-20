@@ -1,4 +1,4 @@
-//! Utilities for error handling.
+//! Utilities for game engine error handling.
 
 use std::error::Error as StdError;
 use std::fmt;

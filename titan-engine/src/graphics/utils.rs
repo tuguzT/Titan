@@ -55,8 +55,7 @@ impl From<InstanceCreationError> for Error {
     }
 }
 
-/// Internal struct for representing suitable physical device
-/// with its queue families.
+/// Internal struct for representing suitable physical device with its queue families.
 pub struct SuitablePhysicalDevice<'a> {
     pub physical_device: PhysicalDevice<'a>,
     pub graphics_family: QueueFamily<'a>,
