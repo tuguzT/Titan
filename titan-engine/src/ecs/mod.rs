@@ -1,6 +1,6 @@
 //! Entity Component System (ECS) utilities for game engine.
 
-use slotmap::{new_key_type, SecondaryMap, SlotMap};
+use slotmap::{new_key_type, SlotMap};
 
 pub use traits::*;
 
@@ -14,10 +14,10 @@ new_key_type! {
     pub struct EntityID;
 }
 
-/// Storage for all **entities** of ECS.
-pub type EntityStorage = SlotMap<EntityID, Entity>;
-
-/// Storage for all **components** of ECS.
-pub type ComponentStorage = SecondaryMap<EntityID, Box<dyn Component>>;
-
-// TODO: define type of storage for all **systems** of ECS
+/// Container for entities, components and systems of ECS.
+#[allow(dead_code)]
+pub struct World {
+    /// Storage for all entities.
+    entities: SlotMap<EntityID, Entity>,
+    // todo storage for components and systems
+}
