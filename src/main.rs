@@ -3,6 +3,7 @@
 #![windows_subsystem = "windows"]
 
 use std::error::Error;
+use std::time::Instant;
 
 use titan_engine::config::Config;
 use titan_engine::window::Event;
@@ -21,6 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let enable_validation = cfg!(debug_assertions);
     let config = Config::new(APP_NAME.to_string(), version, enable_validation);
 
+    let mut start_time = Instant::now();
+    let mut fps = 0;
+
     let application = titan_engine::init(config)?;
     application.run(move |event| match event {
         Event::Created => {
@@ -30,8 +34,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             let size: (u32, u32) = size.into();
             log::debug!("resized with {:?}", size);
         }
-        Event::Update(delta_time) => {
-            log::debug!("delta time: {:?}", delta_time);
+        Event::Update(_delta_time) => {
+            let elapsed = Instant::now().duration_since(start_time);
+            if elapsed.as_secs_f64() > 1.0 {
+                log::debug!("average fps: {}", fps);
+                fps = 0;
+                start_time = Instant::now();
+            } else {
+                fps += 1;
+            }
         }
         Event::Destroyed => {
             log::debug!("destroyed");
