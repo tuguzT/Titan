@@ -484,9 +484,9 @@ impl Renderer {
         builder
             .update_buffer(uniform_buffer, Box::new(self.camera_ubo))
             .map_err(|err| Error::new("update buffer command creation failure", err))?;
-        Ok(builder
+        builder
             .build()
-            .map_err(|err| Error::new("transfer command buffer creation failure", err))?)
+            .map_err(|err| Error::new("transfer command buffer creation failure", err))
     }
 
     /// Create command buffer for actual rendering operations.
@@ -518,9 +518,9 @@ impl Renderer {
             .map_err(|err| Error::new("draw command failure", err))?
             .end_render_pass()
             .map_err(|err| Error::new("end render pass failure", err))?;
-        Ok(builder
+        builder
             .build()
-            .map_err(|err| Error::new("draw command buffer creation failure", err))?)
+            .map_err(|err| Error::new("draw command buffer creation failure", err))
     }
 
     /// Render new frame into the underlying window.
