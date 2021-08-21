@@ -1450,12 +1450,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "titan-engine"
+name = "titan-rs"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "jni",
  "lazy_static",
  "log",
+ "log4rs",
  "palette",
  "pretty_env_logger",
  "semver",
@@ -1465,16 +1467,6 @@ dependencies = [
  "vulkano-shaders",
  "vulkano-win",
  "winit",
-]
-
-[[package]]
-name = "titan-rs"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "log",
- "log4rs",
- "titan-engine",
 ]
 
 [[package]]

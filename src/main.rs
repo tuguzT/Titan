@@ -3,10 +3,12 @@
 #![windows_subsystem = "windows"]
 
 use std::error::Error;
-use std::time::Instant;
 
-use titan_engine::config::Config;
-use titan_engine::window::Event;
+use titan_rs_lib::{
+    config::Config,
+    window::Event,
+    app::DeltaTime,
+};
 
 mod logger;
 
@@ -22,10 +24,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let enable_validation = cfg!(debug_assertions);
     let config = Config::new(APP_NAME.to_string(), version, enable_validation);
 
-    let mut start_time = Instant::now();
+    let mut duration = DeltaTime::ZERO;
     let mut fps = 0;
 
-    let application = titan_engine::init(config)?;
+    let application = titan_rs_lib::init(config)?;
     application.run(move |event| match event {
         Event::Created => {
             log::debug!("created");
@@ -34,12 +36,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             let size: (u32, u32) = size.into();
             log::debug!("resized with {:?}", size);
         }
-        Event::Update(_delta_time) => {
-            let elapsed = Instant::now().duration_since(start_time);
-            if elapsed.as_secs_f64() > 1.0 {
+        Event::Update(delta_time) => {
+            duration += delta_time;
+            if duration.as_secs() > 0 {
                 log::debug!("average fps: {}", fps);
                 fps = 0;
-                start_time = Instant::now();
+                duration = DeltaTime::ZERO;
             } else {
                 fps += 1;
             }
