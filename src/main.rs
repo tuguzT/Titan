@@ -4,11 +4,7 @@
 
 use std::error::Error;
 
-use titan_rs_lib::{
-    config::Config,
-    window::Event,
-    app::DeltaTime,
-};
+use titan_rs_lib::{app::DeltaTime, config::Config, window::Event};
 
 mod logger;
 
