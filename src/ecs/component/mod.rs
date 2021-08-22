@@ -2,7 +2,6 @@
 
 use std::any::Any;
 use std::ops::{Index, IndexMut};
-use std::vec::IntoIter;
 
 use slotmap::{new_key_type, HopSlotMap, SecondaryMap};
 
@@ -119,20 +118,42 @@ where
     }
 }
 
+pub struct IntoIter<T>
+where
+    T: Component,
+{
+    component_to_entity: SecondaryMap<ComponentID, Entity>,
+    components: HopSlotMap<ComponentID, T>,
+    index: usize,
+}
+
+impl<T> Iterator for IntoIter<T>
+where
+    T: Component,
+{
+    type Item = (Entity, T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (id, component) = self.components.iter().nth(self.index)?;
+        self.index += 1;
+        let entity = self.component_to_entity.get(id)?;
+        Some((*entity, *component))
+    }
+}
+
 impl<T> IntoIterator for ComponentStorage<T>
 where
     T: Component,
 {
     type Item = (Entity, T);
-    type IntoIter = IntoIter<Self::Item>;
+    type IntoIter = IntoIter<T>;
 
-    fn into_iter(mut self) -> Self::IntoIter {
-        let component_to_entity = self.component_to_entity;
-        let drained = self.components.drain();
-        let vec: Vec<_> = drained
-            .map(|(id, component)| (component_to_entity[id], component))
-            .collect();
-        vec.into_iter()
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            component_to_entity: self.component_to_entity,
+            components: self.components,
+            index: 0,
+        }
     }
 }
 

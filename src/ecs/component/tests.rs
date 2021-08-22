@@ -80,7 +80,7 @@ fn test_iterator() {
     for ((_, component), value) in storage.iter().zip(10..110) {
         assert_eq!(*component, value);
     }
-    let iterator = storage.into_iter();
+    let iterator: IntoIter<i32> = storage.into_iter();
     let range: Vec<_> = iterator.map(|tuple| tuple.1).collect();
     assert_eq!(range, (10..110).collect::<Vec<_>>());
 }
