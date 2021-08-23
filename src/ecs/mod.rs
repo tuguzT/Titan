@@ -1,6 +1,6 @@
 //! Entity Component System (ECS) utilities for game engine.
 
-pub use component::{Component, ComponentStorage};
+pub use component::Component;
 pub use entity::Entity;
 pub use system::System;
 pub use world::World;

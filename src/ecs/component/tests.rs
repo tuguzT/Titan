@@ -36,18 +36,6 @@ fn test_insertion_assert() {
 }
 
 #[test]
-fn test_replace() {
-    let mut entities = EntityStorage::with_key();
-    let mut storage = ComponentStorage::new();
-
-    let entity = entities.insert(());
-    assert_eq!(storage.replace(entity, 123), None);
-    assert_eq!(storage.replace(entity, 456), Some(123));
-    assert_eq!(storage.remove(entity), Some(456));
-    assert_eq!(storage.remove(entity), None);
-}
-
-#[test]
 #[should_panic]
 fn test_index() {
     let mut entities = EntityStorage::with_key();
