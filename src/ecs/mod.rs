@@ -5,6 +5,7 @@ pub use entity::Entity;
 pub use system::System;
 pub use world::World;
 
+use component::ComponentManager;
 use entity::EntityStorage;
 
 mod component;

@@ -34,24 +34,25 @@ where
     }
 
     /// Inserts component and attaches it to the entity.
+    /// If component was already attached, it will be replaced by value.
     ///
-    /// # Panics
+    /// Returns previously attached component, if any.
     ///
-    /// Panics if component was already attached to the entity.
-    ///
-    pub fn insert(&mut self, entity: Entity, component: T) {
-        assert!(
-            !self.attached(entity),
-            "component was already attached to the entity",
-        );
+    pub fn insert(&mut self, entity: Entity, component: T) -> Option<T> {
+        if self.attached(entity) {
+            let prev = *self.get(entity)?;
+            *self.get_mut(entity)? = component;
+            return Some(prev);
+        }
         let id = self.components.insert(component);
         self.component_to_entity.insert(id, entity);
         self.entity_to_component.insert(entity, id);
+        None
     }
 
     /// Removes component and detaches it from the entity.
     ///
-    /// Returns component that was attached to the entity.
+    /// Returns component that was previously attached to the entity.
     ///
     pub fn remove(&mut self, entity: Entity) -> Option<T> {
         let id = *self.entity_to_component.get(entity)?;

@@ -10,7 +10,7 @@ fn test_insertion() {
     let entity = entities.insert(());
     let component = "foo";
 
-    storage.insert(entity, component);
+    assert_eq!(storage.insert(entity, component), None);
     assert!(storage.attached(entity));
     assert_eq!(storage[entity], "foo");
 
@@ -30,9 +30,9 @@ fn test_insertion_assert() {
     let entity1 = entities.insert(());
     let entity2 = entities.insert(());
 
-    storage.insert(entity1, Instant::now());
-    storage.insert(entity2, Instant::now());
-    storage.insert(entity1, Instant::now());
+    assert_eq!(storage.insert(entity1, Instant::now()), None);
+    assert_eq!(storage.insert(entity2, Instant::now()), None);
+    assert_eq!(storage.insert(entity1, Instant::now()), None);
 }
 
 #[test]
