@@ -4,7 +4,7 @@
 
 use std::error::Error;
 
-use titan_rs_lib::{app::DeltaTime, config::Config, window::Event};
+use titan_core::{app::DeltaTime, config::Config, window::Event};
 
 mod logger;
 
@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut duration = DeltaTime::ZERO;
     let mut fps = 0;
 
-    let application = titan_rs_lib::init(config)?;
+    let application = titan_core::init(config)?;
     application.run(move |event| match event {
         Event::Created => {
             log::debug!("created");

@@ -1,0 +1,11 @@
+[package]
+name = "titan_ecs"
+version = "0.1.0"
+authors = ["tuguzT <timurka.tugushev@gmail.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+slotmap = "1.0.5"

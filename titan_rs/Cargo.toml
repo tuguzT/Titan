@@ -1,0 +1,15 @@
+[package]
+name = "titan_rs"
+version = "0.1.0"
+authors = ["tuguzT <timurka.tugushev@gmail.com>"]
+description = "Simple game engine based on Rust and Vulkan API"
+edition = "2018"
+
+[dependencies]
+titan_core = { path = "../titan_core" }
+chrono = "0.4.19"
+log = "0.4.14"
+log4rs = "1.0.0"
+
+[target.'cfg(target_os = "android")'.dependencies]
+ndk-glue = "0.3.0"

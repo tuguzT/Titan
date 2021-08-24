@@ -1,6 +1,6 @@
 //! Utilities for *systems* in ECS.
 
-use crate::error::Result;
+use std::error::Error;
 
 use super::{Component, World};
 
@@ -13,5 +13,5 @@ pub trait System {
     ///
     /// Do something useful with given components.
     ///
-    fn handle(&mut self, world: &mut World) -> Result<()>;
+    fn handle(&mut self, world: &mut World) -> Result<(), Box<dyn Error + Send + Sync + 'static>>;
 }
