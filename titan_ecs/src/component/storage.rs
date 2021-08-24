@@ -4,7 +4,7 @@ use std::ops::{Index, IndexMut};
 
 use slotmap::{HopSlotMap, SecondaryMap};
 
-use super::{ComponentID, Component, super::Entity};
+use super::{super::Entity, Component, ComponentID};
 
 /// Storage for statically typed components of ECS.
 #[derive(Default)]

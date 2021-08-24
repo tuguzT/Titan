@@ -3,7 +3,7 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
-use super::{Component, ComponentStorage, super::Entity};
+use super::{super::Entity, Component, ComponentStorage};
 
 /// Manager of all components of ECS.
 #[derive(Default)]

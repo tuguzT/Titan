@@ -13,7 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct Error {
     message: String,
-    source: Option<Box<dyn StdError>>,
+    source: Option<Box<dyn StdError + Send + Sync + 'static>>,
 }
 
 impl Error {
@@ -21,7 +21,7 @@ impl Error {
     pub fn new<T, E>(message: T, source: E) -> Self
     where
         T: ToString,
-        E: StdError + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         Self {
             message: message.to_string(),
@@ -43,7 +43,7 @@ impl fmt::Display for Error {
 
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        self.source.as_ref().map(Box::as_ref)
+        self.source.as_ref().map(|err| err.as_ref() as _)
     }
 }
 

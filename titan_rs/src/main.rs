@@ -13,7 +13,7 @@ const APP_VERSION_STR: &str = env!("CARGO_PKG_VERSION", "library must be compile
 
 /// Entry point of `titan-rs` game engine
 #[cfg_attr(target_os = "android", ndk_glue::main(backtrace = "on"))]
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let _handle = logger::init().unwrap();
     log::info!("logger initialized successfully");
 
