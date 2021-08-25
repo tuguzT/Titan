@@ -4,6 +4,8 @@
 
 use std::error::Error;
 
+use egui::TopBottomPanel;
+
 use titan_core::{app::DeltaTime, config::Config, window::Event};
 
 mod logger;
@@ -35,13 +37,20 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         }
         Event::Update(delta_time) => {
             duration += delta_time;
-            if duration.as_secs() > 0 {
-                log::debug!("average fps: {}", fps);
-                fps = 0;
-                duration = DeltaTime::ZERO;
-            } else {
-                fps += 1;
-            }
+        }
+        Event::UI(ctx) => {
+            const ID: &str = "top_panel";
+
+            TopBottomPanel::top(ID).show(&ctx, |ui| {
+                if duration.as_secs() > 0 {
+                    fps = 0;
+                    duration = DeltaTime::ZERO;
+                } else {
+                    fps += 1;
+                }
+                let text = format!("FPS: {}", fps);
+                ui.label(text);
+            });
         }
         Event::Destroyed => {
             log::debug!("destroyed");

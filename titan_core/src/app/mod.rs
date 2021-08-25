@@ -4,9 +4,11 @@ use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use egui_winit_platform::{Platform, PlatformDescriptor};
 use ultraviolet::{Mat4, Vec3};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::Window;
 
 use crate::{
     config::Config,
@@ -26,6 +28,7 @@ pub type DeltaTime = Duration;
 pub struct Application {
     _config: Config,
     renderer: Renderer,
+    egui: Option<Platform>,
     event_loop: Option<EventLoop<()>>,
 }
 
@@ -33,11 +36,27 @@ impl Application {
     fn new(config: Config) -> Result<Self> {
         let event_loop = EventLoop::with_user_event();
         let renderer = Renderer::new(&config, &event_loop)?;
+
+        let window = renderer.window();
+        let size = window.inner_size();
+        let egui = Platform::new(PlatformDescriptor {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: window.scale_factor(),
+            ..Default::default()
+        });
+
         Ok(Self {
             renderer,
+            egui: Some(egui),
             _config: config,
             event_loop: Some(event_loop),
         })
+    }
+
+    /// Returns underlying window of this application.
+    pub fn window(&self) -> &Window {
+        self.renderer.window()
     }
 
     /// Starts execution of game engine.
@@ -51,37 +70,48 @@ impl Application {
         let mut start_time = Instant::now();
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
-            let window = me.renderer.window();
-            let size = window.inner_size();
+
+            let id = me.window().id();
+            let mut egui = me.egui.take().unwrap();
+
+            egui.handle_event(&event);
+            egui.update_time(start_time.elapsed().as_secs_f64());
             match event {
                 Event::NewEvents(StartCause::Init) => {
                     start_time = Instant::now();
                     callback(MyEvent::Created);
-                    window.set_visible(true);
+                    me.window().set_visible(true);
                 }
-                Event::WindowEvent { event, window_id } if window_id == window.id() => {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(size) => {
-                            if size.width == 0 || size.height == 0 {
-                                callback(MyEvent::Resized(Size::default()));
-                                return;
-                            }
-                            if let Err(error) = me.renderer.resize() {
-                                log::error!("window resizing error: {}", error);
-                                *control_flow = ControlFlow::Exit;
-                                return;
-                            }
-                            let size = (size.width, size.height);
-                            callback(MyEvent::Resized(size.into()));
+                Event::WindowEvent { event, window_id } if window_id == id => match event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(size) => {
+                        if size.width == 0 || size.height == 0 {
+                            callback(MyEvent::Resized(Size::default()));
+                            return;
                         }
-                        _ => (),
+                        if let Err(error) = me.renderer.resize() {
+                            log::error!("window resizing error: {}", error);
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                        let size = (size.width, size.height);
+                        callback(MyEvent::Resized(size.into()));
                     }
-                }
+                    _ => (),
+                },
                 Event::MainEventsCleared => {
+                    let size = me.window().inner_size();
                     if size.width == 0 || size.height == 0 {
                         return;
                     }
+
+                    egui.begin_frame();
+                    let context = egui.context();
+                    callback(MyEvent::UI(context.clone()));
+                    let window = me.window();
+                    let (_output, shapes) = egui.end_frame(Some(window));
+                    let _meshes = context.tessellate(shapes);
+                    // TODO: draw UI
 
                     let frame_start = Instant::now();
                     if let Err(error) = me.renderer.render() {
@@ -118,6 +148,8 @@ impl Application {
                 }
                 _ => (),
             }
+
+            me.egui = Some(egui);
         })
     }
 }

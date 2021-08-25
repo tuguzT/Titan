@@ -1,5 +1,7 @@
 //! Utilities for window handling of game engine.
 
+use egui::CtxRef;
+
 use crate::app::DeltaTime;
 
 /// General event of game engine window.
@@ -12,6 +14,9 @@ pub enum Event {
 
     /// Called when game window needs updating.
     Update(DeltaTime),
+
+    /// Called when game UI needs updating.
+    UI(CtxRef),
 
     /// Called when game window will be destroyed.
     Destroyed,
