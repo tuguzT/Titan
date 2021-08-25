@@ -87,11 +87,13 @@ impl Application {
                     WindowEvent::Resized(size) => {
                         if size.width == 0 || size.height == 0 {
                             callback(MyEvent::Resized(Size::default()));
+                            me.egui = Some(egui);
                             return;
                         }
                         if let Err(error) = me.renderer.resize() {
                             log::error!("window resizing error: {}", error);
                             *control_flow = ControlFlow::Exit;
+                            me.egui = Some(egui);
                             return;
                         }
                         let size = (size.width, size.height);
@@ -102,6 +104,7 @@ impl Application {
                 Event::MainEventsCleared => {
                     let size = me.window().inner_size();
                     if size.width == 0 || size.height == 0 {
+                        me.egui = Some(egui);
                         return;
                     }
 
@@ -117,6 +120,7 @@ impl Application {
                     if let Err(error) = me.renderer.render() {
                         log::error!("rendering error: {}", error);
                         *control_flow = ControlFlow::Exit;
+                        me.egui = Some(egui);
                         return;
                     }
                     let frame_end = Instant::now();

@@ -481,7 +481,7 @@ dependencies = [
 [[package]]
 name = "egui_winit_platform"
 version = "0.9.0"
-source = "git+https://github.com/hasenbanck/egui_winit_platform#1908838c4da336eba7c93d7ccc220bda6e78e355"
+source = "git+https://github.com/tuguzT/egui_winit_platform#2c3f253b81c4ed27dcf7d5347371b2f22f48a1c6"
 dependencies = [
  "copypasta",
  "egui",
