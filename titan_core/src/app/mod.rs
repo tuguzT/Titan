@@ -1,6 +1,5 @@
 //! Utilities for engine initialization.
 
-use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -63,64 +62,68 @@ impl Application {
     ///
     /// This function **will not** return any value.
     ///
-    pub fn run(self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
-        let mut me = ManuallyDrop::new(self);
-        let event_loop = me.event_loop.take().unwrap();
+    pub fn run(mut self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
+        let event_loop = self.event_loop.take().unwrap();
 
         let mut start_time = Instant::now();
         event_loop.run(move |event, _, control_flow| {
+            // Have the closure take ownership of `self`.
+            // `event_loop.run` never returns, therefore we must do this to ensure
+            // the resources are properly cleaned up.
+            let _ = &self;
+
             *control_flow = ControlFlow::Poll;
 
-            let id = me.window().id();
-            let mut egui = me.egui.take().unwrap();
-
+            let mut egui = self.egui.take().unwrap();
             egui.handle_event(&event);
             egui.update_time(start_time.elapsed().as_secs_f64());
+
             match event {
                 Event::NewEvents(StartCause::Init) => {
                     start_time = Instant::now();
                     callback(MyEvent::Created);
-                    me.window().set_visible(true);
+                    self.window().set_visible(true);
                 }
-                Event::WindowEvent { event, window_id } if window_id == id => match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(size) => {
-                        if size.width == 0 || size.height == 0 {
-                            callback(MyEvent::Resized(Size::default()));
-                            me.egui = Some(egui);
-                            return;
+                Event::WindowEvent { event, window_id } if window_id == self.window().id() => {
+                    match event {
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                        WindowEvent::Resized(size) => {
+                            if size.width == 0 || size.height == 0 {
+                                callback(MyEvent::Resized(Size::default()));
+                                self.egui = Some(egui);
+                                return;
+                            }
+                            if let Err(error) = self.renderer.resize() {
+                                log::error!("window resizing error: {}", error);
+                                *control_flow = ControlFlow::Exit;
+                                self.egui = Some(egui);
+                                return;
+                            }
+                            let size = (size.width, size.height);
+                            callback(MyEvent::Resized(size.into()));
                         }
-                        if let Err(error) = me.renderer.resize() {
-                            log::error!("window resizing error: {}", error);
-                            *control_flow = ControlFlow::Exit;
-                            me.egui = Some(egui);
-                            return;
-                        }
-                        let size = (size.width, size.height);
-                        callback(MyEvent::Resized(size.into()));
+                        _ => (),
                     }
-                    _ => (),
-                },
+                }
                 Event::MainEventsCleared => {
-                    let size = me.window().inner_size();
+                    let size = self.window().inner_size();
                     if size.width == 0 || size.height == 0 {
-                        me.egui = Some(egui);
+                        self.egui = Some(egui);
                         return;
                     }
 
                     egui.begin_frame();
                     let context = egui.context();
                     callback(MyEvent::UI(context.clone()));
-                    let window = me.window();
-                    let (_output, shapes) = egui.end_frame(Some(window));
+                    let (_output, shapes) = egui.end_frame(Some(self.window()));
                     let _meshes = context.tessellate(shapes);
                     // TODO: draw UI
 
                     let frame_start = Instant::now();
-                    if let Err(error) = me.renderer.render() {
+                    if let Err(error) = self.renderer.render() {
                         log::error!("rendering error: {}", error);
                         *control_flow = ControlFlow::Exit;
-                        me.egui = Some(egui);
+                        self.egui = Some(egui);
                         return;
                     }
                     let frame_end = Instant::now();
@@ -129,7 +132,7 @@ impl Application {
 
                     let ubo = {
                         let duration = Instant::now().duration_since(start_time);
-                        let elapsed = duration.as_millis();
+                        let elapsed = duration.as_millis() as f32;
 
                         use ultraviolet::projection::perspective_vk as perspective;
                         let projection = perspective(
@@ -138,22 +141,21 @@ impl Application {
                             1.0,
                             10.0,
                         );
-                        let model = Mat4::from_rotation_z((elapsed as f32) * 0.1f32.to_radians());
+                        let model = Mat4::from_rotation_z(elapsed * 0.1f32.to_radians());
                         let view =
                             Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
                         CameraUBO::new(projection, model, view)
                     };
-                    me.renderer.set_camera_ubo(ubo);
+                    self.renderer.set_camera_ubo(ubo);
                 }
                 Event::LoopDestroyed => {
                     callback(MyEvent::Destroyed);
-                    unsafe { ManuallyDrop::drop(&mut me) }
                     log::info!("closing this application");
                 }
                 _ => (),
             }
 
-            me.egui = Some(egui);
+            self.egui = Some(egui);
         })
     }
 }
