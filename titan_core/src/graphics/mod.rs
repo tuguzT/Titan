@@ -259,7 +259,7 @@ impl Renderer {
         .map_err(|err| Error::new("depth image creation failure", err))?;
 
         let render_pass = Arc::new(
-            vulkano::single_pass_renderpass! {
+            vulkano::ordered_passes_renderpass! {
                 device.clone(),
                 attachments: {
                     color: {
@@ -277,13 +277,14 @@ impl Renderer {
                         final_layout: ImageLayout::DepthStencilAttachmentOptimal,
                     }
                 },
-                pass: {
-                    color: [color],
-                    depth_stencil: {depth}
-                }
+                passes: [
+                    { color: [color], depth_stencil: {depth}, input: [] },
+                    { color: [color], depth_stencil: {}, input: [] }
+                ]
             }
             .map_err(|err| Error::new("render pass creation failure", err))?,
         );
+        let graphics_subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
         let graphics_pipeline = {
             use self::shader::default::{fragment, vertex};
@@ -303,7 +304,7 @@ impl Renderer {
                     .viewports_dynamic_scissors_irrelevant(1)
                     .depth_stencil_simple_depth()
                     .cull_mode_back()
-                    .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+                    .render_pass(graphics_subpass)
                     .build(device.clone())
                     .map_err(|err| Error::new("graphics pipeline creation failure", err))?,
             )
@@ -506,7 +507,8 @@ impl Renderer {
         .map_err(|err| Error::new("draw command buffer creation failure", err))?;
         builder
             .begin_render_pass(framebuffer, SubpassContents::Inline, clear_values)
-            .map_err(|err| Error::new("begin render pass failure", err))?
+            .map_err(|err| Error::new("begin render pass failure", err))?;
+        builder
             .draw_indexed(
                 self.graphics_pipeline.clone(),
                 &self.dynamic_state,
@@ -515,7 +517,12 @@ impl Renderer {
                 descriptor_set,
                 (),
             )
-            .map_err(|err| Error::new("draw command failure", err))?
+            .map_err(|err| Error::new("draw command failure", err))?;
+        builder
+            .next_subpass(SubpassContents::Inline)
+            .map_err(|err| Error::new("next subpass failure", err))?;
+        // TODO: draw UI here
+        builder
             .end_render_pass()
             .map_err(|err| Error::new("end render pass failure", err))?;
         builder
