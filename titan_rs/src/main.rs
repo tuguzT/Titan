@@ -23,8 +23,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let enable_validation = cfg!(debug_assertions);
     let config = Config::new(APP_NAME.to_string(), version, enable_validation);
 
+    let mut delta_time = DeltaTime::ZERO;
     let mut duration = DeltaTime::ZERO;
     let mut fps = 0;
+    let mut prev_fps = 0;
 
     let application = titan_core::init(config)?;
     application.run(move |event| match event {
@@ -35,20 +37,26 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             let size: (u32, u32) = size.into();
             log::debug!("resized with {:?}", size);
         }
-        Event::Update(delta_time) => {
-            duration += delta_time;
+        Event::Update(new_delta_time) => {
+            delta_time = new_delta_time;
+            duration += new_delta_time;
         }
         Event::UI(ctx) => {
             const ID: &str = "top_panel";
 
             TopBottomPanel::top(ID).show(&ctx, |ui| {
                 if duration.as_secs() > 0 {
+                    prev_fps = fps;
                     fps = 0;
                     duration = DeltaTime::ZERO;
                 } else {
                     fps += 1;
                 }
-                let text = format!("FPS: {}", fps);
+                let text = format!(
+                    "FPS: {}; average: {:.3}",
+                    prev_fps,
+                    1.0 / delta_time.as_secs_f64(),
+                );
                 ui.label(text);
             });
         }

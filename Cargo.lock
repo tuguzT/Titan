@@ -507,6 +507,7 @@ dependencies = [
  "atomic_refcell",
  "emath",
  "ordered-float",
+ "parking_lot",
 ]
 
 [[package]]
@@ -1535,6 +1536,7 @@ version = "0.1.0"
 dependencies = [
  "egui",
  "egui_winit_platform",
+ "epaint",
  "lazy_static",
  "log",
  "palette",

@@ -2,6 +2,7 @@
 
 use std::ops::{Deref, DerefMut};
 
+use epaint::Rgba;
 use palette::Srgba;
 use ultraviolet::{Vec2, Vec3};
 use vulkano::pipeline::vertex::{VertexMember, VertexMemberTy};
@@ -140,5 +141,20 @@ impl UiVertex {
             uv: Position2(uv),
             color: Color(color),
         }
+    }
+}
+
+impl From<epaint::Vertex> for UiVertex {
+    fn from(vertex: epaint::Vertex) -> Self {
+        let position = vertex.pos;
+        let position = Vec2::new(position.x, position.y);
+
+        let uv = vertex.uv;
+        let uv = Vec2::new(uv.x, uv.y);
+
+        let color: Rgba = vertex.color.into();
+        let color = Srgba::new(color.r(), color.g(), color.b(), color.a());
+
+        Self::new(position, uv, color)
     }
 }

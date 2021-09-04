@@ -111,23 +111,22 @@ impl Application {
                         self.egui = Some(egui);
                         return;
                     }
+                    let frame_start = Instant::now();
 
                     egui.begin_frame();
                     let context = egui.context();
                     callback(MyEvent::UI(context.clone()));
                     let (_output, shapes) = egui.end_frame(Some(self.window()));
-                    let _meshes = context.tessellate(shapes);
-                    // TODO: draw UI
+                    let meshes = context.tessellate(shapes);
+                    let texture = context.texture();
 
-                    let frame_start = Instant::now();
-                    if let Err(error) = self.renderer.render() {
+                    if let Err(error) = self.renderer.render(Some((meshes, texture))) {
                         log::error!("rendering error: {}", error);
                         *control_flow = ControlFlow::Exit;
                         self.egui = Some(egui);
                         return;
                     }
-                    let frame_end = Instant::now();
-                    let delta_time = frame_end.duration_since(frame_start);
+                    let delta_time = Instant::now().duration_since(frame_start);
                     callback(MyEvent::Update(delta_time));
 
                     let ubo = {

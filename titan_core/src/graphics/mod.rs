@@ -3,9 +3,10 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use egui::{ClippedMesh, Pos2, Texture};
 use palette::Srgba;
 use ultraviolet::Vec3;
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
     SubpassContents,
@@ -15,13 +16,18 @@ use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::{ClearValue, Format};
 use vulkano::image::view::ImageView;
-use vulkano::image::{AttachmentImage, ImageAccess, ImageUsage, SwapchainImage};
+use vulkano::image::{
+    AttachmentImage, ImageAccess, ImageDimensions, ImageUsage, ImmutableImage, MipmapsCount,
+    SwapchainImage,
+};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::instance::Instance;
+use vulkano::pipeline::blend::{AttachmentBlend, BlendFactor};
 use vulkano::pipeline::vertex::BuffersDefinition;
-use vulkano::pipeline::viewport::Viewport;
+use vulkano::pipeline::viewport::{Scissor, Viewport};
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::render_pass::{Framebuffer, FramebufferAbstract, RenderPass, Subpass};
+use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 use vulkano::swapchain::{AcquireError, ColorSpace, PresentMode, Surface, Swapchain};
 use vulkano::sync::{FlushError, GpuFuture, SharingMode};
 use vulkano::{swapchain, sync};
@@ -32,6 +38,7 @@ use winit::window::{Window, WindowBuilder};
 
 use crate::config::Config;
 use crate::error::{Error, Result};
+use crate::graphics::vertex::UiVertex;
 
 use self::camera::CameraUBO;
 use self::vertex::Vertex;
@@ -43,7 +50,7 @@ mod shader;
 mod utils;
 mod vertex;
 
-const fn indices() -> [u16; 12] {
+const fn indices() -> [u32; 12] {
     [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4]
 }
 
@@ -61,20 +68,27 @@ fn vertices() -> [Vertex; 8] {
 }
 
 /// System that renders all game objects and UI.
-// TODO: UI rendering
 pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
     recreate_swapchain: bool,
     camera_ubo: CameraUBO,
 
-    descriptor_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    ub_descriptor_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
     uniform_buffers: Vec<Arc<CpuAccessibleBuffer<CameraUBO>>>,
-    index_buffer: Arc<ImmutableBuffer<[u16]>>,
+    index_buffer: Arc<ImmutableBuffer<[u32]>>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
+    ui_vertex_buffer: Arc<CpuBufferPool<UiVertex>>,
+    ui_index_buffer: Arc<CpuBufferPool<u32>>,
 
     framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
     dynamic_state: DynamicState,
     graphics_pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
+    ui_pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
+
+    egui_texture_version: u64,
+    egui_texture_descriptor_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
+    egui_sampler: Arc<Sampler>,
+
     render_pass: Arc<RenderPass>,
     depth_image: Arc<AttachmentImage>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
@@ -285,6 +299,7 @@ impl Renderer {
             .map_err(|err| Error::new("render pass creation failure", err))?,
         );
         let graphics_subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+        let ui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
 
         let graphics_pipeline = {
             use self::shader::default::{fragment, vertex};
@@ -310,6 +325,34 @@ impl Renderer {
             )
         };
 
+        let ui_pipeline = {
+            use self::shader::ui::{fragment, vertex};
+
+            let vert_shader_module = vertex::Shader::load(device.clone())
+                .map_err(|err| Error::new("vertex shader module creation failure", err))?;
+            let frag_shader_module = fragment::Shader::load(device.clone())
+                .map_err(|err| Error::new("fragment shader module creation failure", err))?;
+
+            let blend = AttachmentBlend {
+                color_source: BlendFactor::One,
+                ..AttachmentBlend::alpha_blending()
+            };
+
+            Arc::new(
+                GraphicsPipeline::start()
+                    .vertex_input_single_buffer::<UiVertex>()
+                    .vertex_shader(vert_shader_module.main_entry_point(), ())
+                    .fragment_shader(frag_shader_module.main_entry_point(), ())
+                    .triangle_list()
+                    .viewports_scissors_dynamic(1)
+                    .cull_mode_disabled()
+                    .blend_collective(blend)
+                    .render_pass(ui_subpass)
+                    .build(device.clone())
+                    .map_err(|err| Error::new("UI pipeline creation failure", err))?,
+            )
+        };
+
         let mut dynamic_state = DynamicState::none();
         let framebuffers = Self::create_framebuffers(
             swapchain_images.as_slice(),
@@ -330,6 +373,7 @@ impl Renderer {
                 .map_err(|err| Error::new("vertex buffer creation failure", err))?;
             vertex_buffer
         };
+        let ui_vertex_buffer = Arc::new(CpuBufferPool::vertex_buffer(device.clone()));
 
         let index_buffer = {
             let (index_buffer, future) = ImmutableBuffer::from_iter(
@@ -343,6 +387,24 @@ impl Renderer {
                 .map_err(|err| Error::new("index buffer creation failure", err))?;
             index_buffer
         };
+        let ui_index_buffer = Arc::new(CpuBufferPool::new(
+            device.clone(),
+            BufferUsage::index_buffer(),
+        ));
+        let egui_sampler = Sampler::new(
+            device.clone(),
+            Filter::Linear,
+            Filter::Linear,
+            MipmapMode::Linear,
+            SamplerAddressMode::ClampToEdge,
+            SamplerAddressMode::ClampToEdge,
+            SamplerAddressMode::ClampToEdge,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+        )
+        .map_err(|err| Error::new("sample creation error", err))?;
 
         let uniform_buffers = swapchain_images
             .iter()
@@ -384,15 +446,21 @@ impl Renderer {
             depth_image,
             render_pass,
             graphics_pipeline,
+            ui_pipeline,
             dynamic_state,
             framebuffers,
             vertex_buffer,
+            ui_vertex_buffer,
             index_buffer,
+            ui_index_buffer,
             uniform_buffers,
-            descriptor_sets,
+            ub_descriptor_sets: descriptor_sets,
             camera_ubo: CameraUBO::default(),
             previous_frame_end,
             recreate_swapchain: false,
+            egui_texture_version: 0,
+            egui_texture_descriptor_set: None,
+            egui_sampler,
         })
     }
 
@@ -491,13 +559,18 @@ impl Renderer {
     }
 
     /// Create command buffer for actual rendering operations.
-    fn draw_cb(&self, image_index: usize) -> Result<PrimaryAutoCommandBuffer> {
+    fn draw_cb(
+        &mut self,
+        image_index: usize,
+        ui: Option<(Vec<ClippedMesh>, Arc<Texture>)>,
+    ) -> Result<PrimaryAutoCommandBuffer> {
         let framebuffer = self.framebuffers[image_index].clone();
+        let dimensions = framebuffer.dimensions();
         let clear_values = [
             ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
             ClearValue::Depth(1.0),
         ];
-        let descriptor_set = self.descriptor_sets[image_index].clone();
+        let descriptor_set = self.ub_descriptor_sets[image_index].clone();
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.device.clone(),
@@ -521,7 +594,119 @@ impl Renderer {
         builder
             .next_subpass(SubpassContents::Inline)
             .map_err(|err| Error::new("next subpass failure", err))?;
-        // TODO: draw UI here
+        if let Some((ui_meshes, ui_texture)) = ui {
+            use self::shader::ui::vertex;
+
+            if ui_texture.version != self.egui_texture_version {
+                self.egui_texture_version = ui_texture.version;
+                let layout = self.ui_pipeline.layout().descriptor_set_layouts()[0].clone();
+                let image = {
+                    let dimensions = ImageDimensions::Dim2d {
+                        width: ui_texture.width as u32,
+                        height: ui_texture.height as u32,
+                        array_layers: 1,
+                    };
+                    let data: Vec<_> = ui_texture
+                        .pixels
+                        .iter()
+                        .flat_map(|&r| vec![r, r, r, r])
+                        .collect();
+
+                    let (image, image_future) = ImmutableImage::from_iter(
+                        data.into_iter(),
+                        dimensions,
+                        MipmapsCount::One,
+                        Format::R8G8B8A8Unorm,
+                        self.graphics_queue.clone(),
+                    )
+                    .map_err(|err| Error::new("UI texture creation failure", err))?;
+
+                    image_future
+                        .flush()
+                        .map_err(|err| Error::new("UI texture creation failure", err))?;
+                    image
+                };
+
+                let view = ImageView::new(image)
+                    .map_err(|err| Error::new("UI texture image view creation failure", err))?;
+                let set = Arc::new(
+                    PersistentDescriptorSet::start(layout)
+                        .add_sampled_image(view, self.egui_sampler.clone())
+                        .map_err(|err| Error::new("sampled image addition failure", err))?
+                        .build()
+                        .map_err(|err| {
+                            let message = "UI texture descriptor set creation failure";
+                            Error::new(message, err)
+                        })?,
+                );
+                self.egui_texture_descriptor_set = Some(set);
+            }
+
+            let width = dimensions[0] as f32;
+            let height = dimensions[1] as f32;
+            let scale_factor = self.window().scale_factor() as f32;
+            let push_constants = vertex::ty::PushConstants {
+                screen_size: [width / scale_factor, height / scale_factor],
+            };
+            for ClippedMesh(rect, mesh) in ui_meshes {
+                // Nothing to draw if we don't have vertices & indices
+                if mesh.vertices.is_empty() || mesh.indices.is_empty() {
+                    continue;
+                }
+                let scissor = {
+                    let min = rect.min;
+                    let min = Pos2 {
+                        x: min.x * scale_factor,
+                        y: min.y * scale_factor,
+                    };
+                    let min = Pos2 {
+                        x: min.x.clamp(0.0, width),
+                        y: min.y.clamp(0.0, height),
+                    };
+                    let max = rect.max;
+                    let max = Pos2 {
+                        x: max.x * scale_factor,
+                        y: max.y * scale_factor,
+                    };
+                    let max = Pos2 {
+                        x: max.x.clamp(min.x, width),
+                        y: max.y.clamp(min.y, height),
+                    };
+                    Scissor {
+                        origin: [min.x.round() as i32, min.y.round() as i32],
+                        dimensions: [
+                            (max.x.round() - min.x) as u32,
+                            (max.y.round() - min.y) as u32,
+                        ],
+                    }
+                };
+                self.dynamic_state.scissors = Some(vec![scissor]);
+
+                let chunk = mesh.vertices.into_iter().map(|vertex| vertex.into());
+                let vertex_buffer = self
+                    .ui_vertex_buffer
+                    .chunk(chunk)
+                    .map_err(|err| Error::new("UI vertex buffer allocation failure", err))?;
+
+                let chunk = mesh.indices.into_iter();
+                let index_buffer = self
+                    .ui_index_buffer
+                    .chunk(chunk)
+                    .map_err(|err| Error::new("UI index buffer allocation failure", err))?;
+
+                builder
+                    .draw_indexed(
+                        self.ui_pipeline.clone(),
+                        &self.dynamic_state,
+                        vertex_buffer,
+                        index_buffer,
+                        self.egui_texture_descriptor_set.as_ref().unwrap().clone(),
+                        push_constants,
+                    )
+                    .map_err(|err| Error::new("UI draw command failure", err))?;
+            }
+            self.dynamic_state.scissors = None;
+        }
         builder
             .end_render_pass()
             .map_err(|err| Error::new("end render pass failure", err))?;
@@ -531,7 +716,7 @@ impl Renderer {
     }
 
     /// Render new frame into the underlying window.
-    pub fn render(&mut self) -> Result<()> {
+    pub fn render(&mut self, ui: Option<(Vec<ClippedMesh>, Arc<Texture>)>) -> Result<()> {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
         if self.recreate_swapchain {
             self.resize()?;
@@ -549,7 +734,7 @@ impl Renderer {
         self.recreate_swapchain = suboptimal;
 
         let transfer_command_buffer = self.transfer_cb(image_index)?;
-        let draw_command_buffer = self.draw_cb(image_index)?;
+        let draw_command_buffer = self.draw_cb(image_index, ui)?;
         let previous_frame_end = self.previous_frame_end.take().unwrap();
 
         let future = previous_frame_end

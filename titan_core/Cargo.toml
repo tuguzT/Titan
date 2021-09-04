@@ -18,5 +18,6 @@ vulkano-win = "0.25"
 vulkano-shaders = "0.25"
 egui_winit_platform = { version = "0.10", features = ["clipboard", "webbrowser"] }
 egui = "0.14"
+epaint = "0.14"
 ultraviolet = "0.8"
 palette = "0.6"
