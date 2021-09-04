@@ -1,6 +1,6 @@
 #version 450
 
-layout(location = 0) in vec2 pos;
+layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 uv;
 layout(location = 2) in vec4 color;
 
@@ -27,12 +27,7 @@ vec4 linear_from_srgba(vec4 srgba) {
 }
 
 void main() {
-    gl_Position = vec4(
-        2.0 * pos.x / pushConstants.screen_size.x - 1.0,
-        2.0 * pos.y / pushConstants.screen_size.y - 1.0,
-        0.0,
-        1.0
-    );
+    gl_Position = vec4(2.0 * position / pushConstants.screen_size - 1.0, 0.0, 1.0);
     outColor = linear_from_srgba(color);
     outUV = uv;
 }

@@ -13,7 +13,7 @@ use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
 use crate::error::{Error, Result};
 
 /// Convert `semver` Version struct into `vulkano` Version struct.
-#[inline]
+#[inline(always)]
 const fn to_vk_version(version: &semver::Version) -> vulkano::Version {
     vulkano::Version {
         major: version.major as u32,
