@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use egui_winit_platform::{Platform, PlatformDescriptor};
+use thiserror::Error;
 use ultraviolet::{Mat4, Vec3};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -11,10 +12,20 @@ use winit::window::Window;
 
 use crate::{
     config::Config,
-    error::{Error, Result},
-    graphics::{camera::CameraUBO, Renderer},
+    graphics::{camera::CameraUBO, Renderer, RendererCreationError},
     window::{Event as MyEvent, Size},
 };
+
+pub type Result<T> = std::result::Result<T, AppCreationError>;
+
+#[derive(Debug, Error)]
+pub enum AppCreationError {
+    #[error("cannot create more than one application instance")]
+    Initialized,
+
+    #[error("graphics initialization error: {0}")]
+    Graphics(#[from] RendererCreationError),
+}
 
 /// Type which represents duration between two frames.
 pub type DeltaTime = Duration;
@@ -185,10 +196,8 @@ pub fn init(config: Config) -> Result<Application> {
         )
         .unwrap();
 
-    if !initialized {
-        Application::new(config)
-    } else {
-        let message = "cannot create more than one application instance";
-        Err(Error::from(message))
+    if initialized {
+        return Err(AppCreationError::Initialized);
     }
+    Application::new(config)
 }

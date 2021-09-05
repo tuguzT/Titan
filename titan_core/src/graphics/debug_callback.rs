@@ -8,8 +8,6 @@ use vulkano::instance::debug::{
 };
 use vulkano::instance::Instance;
 
-use crate::error::{Error, Result};
-
 /// Create debug callback for validation via Vulkan SDK.
 ///
 /// Note that Khronos validation layer must be enabled.
@@ -18,9 +16,8 @@ pub fn create_debug_callback(
     instance: &Arc<Instance>,
     severity: MessageSeverity,
     ty: MessageType,
-) -> Result<DebugCallback> {
-    let debug_callback = DebugCallback::new(instance, severity, ty, self::user_callback)?;
-    Ok(debug_callback)
+) -> Result<DebugCallback, DebugCallbackCreationError> {
+    DebugCallback::new(instance, severity, ty, self::user_callback)
 }
 
 /// The actual callback validation function.
@@ -52,10 +49,4 @@ fn user_callback(message: &Message) {
         layer_prefix,
         description,
     );
-}
-
-impl From<DebugCallbackCreationError> for Error {
-    fn from(error: DebugCallbackCreationError) -> Self {
-        Self::new("debug callback creation failure", error)
-    }
 }

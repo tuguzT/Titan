@@ -12,6 +12,7 @@ crate-type = ["rlib", "cdylib"]
 semver = "1.0"
 lazy_static = "1.4"
 log = "0.4"
+thiserror = "1.0"
 winit = "0.25"
 vulkano = "0.25"
 vulkano-win = "0.25"

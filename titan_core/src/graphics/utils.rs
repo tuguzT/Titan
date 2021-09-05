@@ -10,7 +10,6 @@ use vulkano_win::required_extensions;
 use winit::window::Window;
 
 use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
-use crate::error::{Error, Result};
 
 /// Convert `semver` Version struct into `vulkano` Version struct.
 #[inline(always)]
@@ -27,7 +26,7 @@ const fn to_vk_version(version: &semver::Version) -> vulkano::Version {
 /// Will enable `VK_EXT_debug_utils` extension if
 /// validation is enabled by config.
 ///
-pub fn create_instance(config: &Config) -> Result<Arc<Instance>> {
+pub fn create_instance(config: &Config) -> Result<Arc<Instance>, InstanceCreationError> {
     let info = ApplicationInfo {
         application_name: Some(config.name().into()),
         application_version: Some(self::to_vk_version(config.version())),
@@ -45,14 +44,7 @@ pub fn create_instance(config: &Config) -> Result<Arc<Instance>> {
         .enable_validation()
         .then(|| "VK_LAYER_KHRONOS_validation");
 
-    let instance = Instance::new(Some(&info), vulkano::Version::V1_2, &extensions, layers)?;
-    Ok(instance)
-}
-
-impl From<InstanceCreationError> for Error {
-    fn from(error: InstanceCreationError) -> Self {
-        Self::new("instance creation failure", error)
-    }
+    Instance::new(Some(&info), vulkano::Version::V1_2, &extensions, layers)
 }
 
 /// Internal struct for representing suitable physical device with its queue families.
