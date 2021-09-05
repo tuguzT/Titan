@@ -4,7 +4,7 @@
 
 use std::error::Error;
 
-use egui::TopBottomPanel;
+use egui::{TextureId, TopBottomPanel, Window};
 
 use titan_core::{app::DeltaTime, config::Config, window::Event};
 
@@ -59,6 +59,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 );
                 ui.label(text);
             });
+            Window::new("Movable dialog")
+                .collapsible(false)
+                .resizable(false)
+                .show(&ctx, |ui| {
+                    ui.image(TextureId::Egui, [300.0, 80.0]);
+                });
         }
         Event::Destroyed => {
             log::debug!("destroyed");
