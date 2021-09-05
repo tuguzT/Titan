@@ -16,7 +16,8 @@ use log4rs::Handle;
 /// An error is returned if logger has already been initialized.
 ///
 pub fn init() -> Result<Handle, impl Error> {
-    let pattern = "{d:<35} [thread \"{T}\" id {({I}]):<6} {l:<5} {t} >> {m}{n}";
+    let pattern = "{d(%Y-%m-%dT%H:%M:%S%.f):0<29}{d(%:z)} \
+        [thread \"{T}\" id {({I}]):<6} {l:<5} {t} >> {m}{n}";
     let encoder = Box::new(PatternEncoder::new(pattern));
 
     let stdout = ConsoleAppender::builder().encoder(encoder.clone()).build();
