@@ -34,7 +34,6 @@ pub type DeltaTime = Duration;
 ///
 /// Can be created using [`init`] function.
 ///
-/// [`init`]: fn.init.html
 pub struct Application {
     _config: Config,
     renderer: Renderer,
@@ -181,7 +180,6 @@ impl Application {
 ///
 /// This function could panic if invoked **not on main thread**.
 ///
-/// [`Application`]: struct.Application.html
 pub fn init(config: Config) -> Result<Application> {
     static FLAG: AtomicBool = AtomicBool::new(false);
     const UNINITIALIZED: bool = false;

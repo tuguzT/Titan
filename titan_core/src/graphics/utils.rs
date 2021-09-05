@@ -11,7 +11,7 @@ use winit::window::Window;
 
 use crate::config::{Config, ENGINE_NAME, ENGINE_VERSION};
 
-/// Convert `semver` Version struct into `vulkano` Version struct.
+/// Convert [`semver::Version`] Version struct into [`vulkano::Version`] struct.
 #[inline(always)]
 const fn to_vk_version(version: &semver::Version) -> vulkano::Version {
     vulkano::Version {

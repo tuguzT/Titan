@@ -1,3 +1,5 @@
+//! Error types and utilities for graphics backend for game engine.
+
 use thiserror::Error;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilderContextError, BeginRenderPassError, BuildError, CommandBufferExecError,
@@ -17,49 +19,50 @@ use vulkano::swapchain::{AcquireError, CapabilitiesError, SwapchainCreationError
 use vulkano::sync::FlushError;
 use vulkano::OomError;
 
+/// Error that can happen when creating the [`Renderer`](super::Renderer) system.
 #[derive(Debug, Error)]
 pub enum RendererCreationError {
     #[error("failed to allocate memory for shader modules: {0}")]
-    OomError(#[from] OomError),
+    OutOfMemory(#[from] OomError),
 
     #[error("instance creation failure: {0}")]
-    Instance(#[from] InstanceCreationError),
+    InstanceCreation(#[from] InstanceCreationError),
 
     #[error("debug callback creation failure: {0}")]
-    DebugCallback(#[from] DebugCallbackCreationError),
+    DebugCallbackCreation(#[from] DebugCallbackCreationError),
 
     #[error("surface creation failure: {0}")]
-    Surface(#[from] vulkano_win::CreationError),
+    SurfaceCreation(#[from] vulkano_win::CreationError),
 
     #[error("no suitable physical device were found")]
     NoSuitablePhysicalDevice,
 
     #[error("device creation failure: {0}")]
-    Device(#[from] DeviceCreationError),
+    DeviceCreation(#[from] DeviceCreationError),
 
     #[error("failed to get surface capabilities: {0}")]
-    SurfaceCapabilities(#[from] CapabilitiesError),
+    SurfaceCapabilitiesRetrieve(#[from] CapabilitiesError),
 
     #[error("swapchain creation failure: {0}")]
-    Swapchain(#[from] SwapchainCreationError),
+    SwapchainCreation(#[from] SwapchainCreationError),
 
-    #[error("depth image creation failure: {0}")]
-    DepthImage(#[from] ImageCreationError),
+    #[error("image creation failure: {0}")]
+    ImageCreation(#[from] ImageCreationError),
 
     #[error("render pass creation failure: {0}")]
-    RenderPass(#[from] RenderPassCreationError),
+    RenderPassCreation(#[from] RenderPassCreationError),
 
     #[error("framebuffer creation failure: {0}")]
-    Framebuffer(#[from] FramebuffersCreationError),
+    FramebuffersCreation(#[from] FramebuffersCreationError),
 
     #[error("graphics pipeline creation failure: {0}")]
-    GraphicsPipeline(#[from] GraphicsPipelineCreationError),
+    GraphicsPipelineCreation(#[from] GraphicsPipelineCreationError),
 
     #[error("sampler creation failure: {0}")]
-    Sampler(#[from] SamplerCreationError),
+    SamplerCreation(#[from] SamplerCreationError),
 
     #[error("descriptor set creation failure: {0}")]
-    DescriptorSet(#[from] DescriptorSetCreationError),
+    DescriptorSetCreation(#[from] DescriptorSetCreationError),
 
     #[error("failed to allocate device memory: {0}")]
     MemoryAllocation(#[from] DeviceMemoryAllocError),
@@ -68,6 +71,7 @@ pub enum RendererCreationError {
     GpuFutureFlush(#[from] FlushError),
 }
 
+/// Error that can happen on descriptor set creation.
 #[derive(Debug, Error)]
 pub enum DescriptorSetCreationError {
     #[error("persistent descriptor set addition failure: {0}")]
@@ -77,15 +81,17 @@ pub enum DescriptorSetCreationError {
     Build(#[from] PersistentDescriptorSetBuildError),
 }
 
+/// Error that can happen on framebuffers creation for [`Renderer`](super::Renderer) system.
 #[derive(Debug, Error)]
 pub enum FramebuffersCreationError {
     #[error("image view creation failure: {0}")]
     ImageViewCreation(#[from] ImageViewCreationError),
 
     #[error("framebuffer creation failure: {0}")]
-    FramebufferSet(#[from] FramebufferCreationError),
+    FramebufferSetup(#[from] FramebufferCreationError),
 }
 
+/// Error that can happen on resizing of [`Renderer`](super::Renderer) system.
 #[derive(Debug, Error)]
 pub enum ResizeError {
     #[error("swapchain recreation failure: {0}")]
@@ -98,10 +104,13 @@ pub enum ResizeError {
     DepthImageRecreation(#[from] ImageCreationError),
 }
 
+/// Error that can happen on transfer command buffer creation
+/// for [`Renderer`](super::Renderer) system.
+///
 #[derive(Debug, Error)]
 pub enum TransferCommandBufferCreationError {
     #[error("failed to allocate transfer command buffer: {0}")]
-    OomError(#[from] OomError),
+    OutOfMemory(#[from] OomError),
 
     #[error("update buffer command failure: {0}")]
     UpdateBuffer(#[from] UpdateBufferError),
@@ -110,10 +119,13 @@ pub enum TransferCommandBufferCreationError {
     Build(#[from] BuildError),
 }
 
+/// Error that can happen on graphics command buffer creation
+/// for [`Renderer`](super::Renderer) system.
+///
 #[derive(Debug, Error)]
 pub enum GraphicsCommandBufferCreationError {
     #[error("failed to allocate graphics command buffer: {0}")]
-    OomError(#[from] OomError),
+    OutOfMemory(#[from] OomError),
 
     #[error("begin render pass command failure: {0}")]
     BeginRenderPass(#[from] BeginRenderPassError),
@@ -134,15 +146,16 @@ pub enum GraphicsCommandBufferCreationError {
     GpuFutureFlush(#[from] FlushError),
 
     #[error("graphics command buffer descriptor set creation failure: {0}")]
-    DescriptorSet(#[from] DescriptorSetCreationError),
+    DescriptorSetCreation(#[from] DescriptorSetCreationError),
 
     #[error("graphics command buffer building failure: {0}")]
-    Building(#[from] AutoCommandBufferBuilderContextError),
+    WrongUsage(#[from] AutoCommandBufferBuilderContextError),
 
     #[error("graphics command buffer build failure: {0}")]
     Build(#[from] BuildError),
 }
 
+/// Error that can happen on rendering operation of [`Renderer`](super::Renderer) system.
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("transfer command buffer creation error while rendering: {0}")]

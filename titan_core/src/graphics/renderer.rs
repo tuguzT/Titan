@@ -1,3 +1,5 @@
+//! Render utilities for graphics backend for game engine.
+
 use std::collections::HashSet;
 use std::sync::Arc;
 
