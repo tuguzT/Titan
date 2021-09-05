@@ -290,9 +290,7 @@ impl Renderer {
             use super::shader::default::{fragment, vertex};
 
             let vert_shader_module = vertex::Shader::load(device.clone())?;
-            // .map_err(|err| Error::new("vertex shader module creation failure", err))?;
             let frag_shader_module = fragment::Shader::load(device.clone())?;
-            // .map_err(|err| Error::new("fragment shader module creation failure", err))?;
 
             Arc::new(
                 GraphicsPipeline::start()
@@ -313,9 +311,7 @@ impl Renderer {
             use super::shader::ui::{fragment, vertex};
 
             let vert_shader_module = vertex::Shader::load(device.clone())?;
-            // .map_err(|err| Error::new("vertex shader module creation failure", err))?;
             let frag_shader_module = fragment::Shader::load(device.clone())?;
-            // .map_err(|err| Error::new("fragment shader module creation failure", err))?;
 
             let blend = AttachmentBlend {
                 color_source: BlendFactor::One,
@@ -580,10 +576,8 @@ impl Renderer {
                 let set = {
                     let builder = PersistentDescriptorSet::start(layout)
                         .add_sampled_image(view, self.egui_sampler.clone())
-                        .map_err(Into::<DescriptorSetCreationError>::into)?;
-                    let set = builder
-                        .build()
-                        .map_err(Into::<DescriptorSetCreationError>::into)?;
+                        .map_err(DescriptorSetCreationError::from)?;
+                    let set = builder.build().map_err(DescriptorSetCreationError::from)?;
                     Arc::new(set)
                 };
                 self.egui_texture_descriptor_set = Some(set);
@@ -629,18 +623,19 @@ impl Renderer {
                 };
                 self.dynamic_state.scissors = Some(vec![scissor]);
 
-                let chunk = mesh.vertices.into_iter().map(|vertex| vertex.into());
+                let chunk = mesh.vertices.into_iter().map(UiVertex::from);
                 let vertex_buffer = self.ui_vertex_buffer.chunk(chunk)?;
 
                 let chunk = mesh.indices.into_iter();
                 let index_buffer = self.ui_index_buffer.chunk(chunk)?;
 
+                let descriptor_sets = self.egui_texture_descriptor_set.as_ref().unwrap().clone();
                 builder.draw_indexed(
                     self.ui_pipeline.clone(),
                     &self.dynamic_state,
                     vertex_buffer,
                     index_buffer,
-                    self.egui_texture_descriptor_set.as_ref().unwrap().clone(),
+                    descriptor_sets,
                     push_constants,
                 )?;
             }
