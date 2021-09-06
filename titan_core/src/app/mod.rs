@@ -69,9 +69,6 @@ impl Application {
     }
 
     /// Starts execution of game engine.
-    ///
-    /// This function **will not** return any value.
-    ///
     pub fn run(mut self, mut callback: impl FnMut(MyEvent) + 'static) -> ! {
         let event_loop = self.event_loop.take().unwrap();
 
@@ -84,86 +81,115 @@ impl Application {
 
             *control_flow = ControlFlow::Poll;
 
+            // Take `Platform` object from `self` to workaround about borrow checker.
             let mut egui = self.egui.take().unwrap();
-            egui.handle_event(&event);
-            egui.update_time(start_time.elapsed().as_secs_f64());
 
-            match event {
-                Event::NewEvents(StartCause::Init) => {
-                    start_time = Instant::now();
-                    callback(MyEvent::Created);
-                    self.window().set_visible(true);
-                }
-                Event::WindowEvent { event, window_id } if window_id == self.window().id() => {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(size) => {
-                            if size.width == 0 || size.height == 0 {
-                                callback(MyEvent::Resized(Size::default()));
-                                self.egui = Some(egui);
-                                return;
+            // Have this closure to early return if needed (for example if error is occurred).
+            // Closure is needed because `label_break_value` feature is unstable.
+            let action = || {
+                egui.handle_event(&event);
+                egui.update_time(start_time.elapsed().as_secs_f64());
+
+                let window = self.window();
+                match event {
+                    Event::NewEvents(StartCause::Init) => {
+                        start_time = Instant::now();
+                        callback(MyEvent::Created);
+                        window.set_visible(true);
+                    }
+                    Event::WindowEvent { event, window_id } if window_id == window.id() => {
+                        match event {
+                            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                            WindowEvent::Resized(size) => {
+                                if size.width == 0 || size.height == 0 {
+                                    callback(MyEvent::Resized(Size::default()));
+                                    return;
+                                }
+                                if let Err(error) = self.renderer.resize() {
+                                    log::error!("window resizing error: {}", error);
+                                    *control_flow = ControlFlow::Exit;
+                                    return;
+                                }
+                                let size = (size.width, size.height);
+                                callback(MyEvent::Resized(size.into()));
                             }
-                            if let Err(error) = self.renderer.resize() {
-                                log::error!("window resizing error: {}", error);
-                                *control_flow = ControlFlow::Exit;
-                                self.egui = Some(egui);
-                                return;
+                            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                                let size = *new_inner_size;
+                                if size.width == 0 || size.height == 0 {
+                                    callback(MyEvent::Resized(Size::default()));
+                                    return;
+                                }
+                                if let Err(error) = self.renderer.resize() {
+                                    log::error!("window resizing error: {}", error);
+                                    *control_flow = ControlFlow::Exit;
+                                    return;
+                                }
+                                let size = (size.width, size.height);
+                                callback(MyEvent::Resized(size.into()));
                             }
-                            let size = (size.width, size.height);
-                            callback(MyEvent::Resized(size.into()));
+                            _ => (),
                         }
-                        _ => (),
                     }
-                }
-                Event::MainEventsCleared => {
-                    let size = self.window().inner_size();
-                    if size.width == 0 || size.height == 0 {
-                        self.egui = Some(egui);
-                        return;
+                    Event::MainEventsCleared => {
+                        let size = window.inner_size();
+                        if size.width == 0 || size.height == 0 {
+                            return;
+                        }
+                        window.request_redraw();
                     }
-                    let frame_start = Instant::now();
+                    Event::RedrawRequested(window_id) if window_id == window.id() => {
+                        let size = window.inner_size();
+                        if size.width == 0 || size.height == 0 {
+                            return;
+                        }
+                        let frame_start = Instant::now();
 
-                    egui.begin_frame();
-                    let context = egui.context();
-                    callback(MyEvent::UI(context.clone()));
-                    let (_output, shapes) = egui.end_frame(Some(self.window()));
-                    let meshes = context.tessellate(shapes);
-                    let texture = context.texture();
+                        egui.begin_frame();
+                        let context = egui.context();
+                        callback(MyEvent::UI(context.clone()));
+                        let (_output, shapes) = egui.end_frame(Some(window));
+                        let meshes = context.tessellate(shapes);
+                        let texture = context.texture();
 
-                    if let Err(error) = self.renderer.render(Some((meshes, texture))) {
-                        log::error!("rendering error: {}", error);
-                        *control_flow = ControlFlow::Exit;
-                        self.egui = Some(egui);
-                        return;
+                        if let Err(error) = self.renderer.render(Some((meshes, texture))) {
+                            log::error!("rendering error: {}", error);
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                        let delta_time = Instant::now().duration_since(frame_start);
+                        callback(MyEvent::Update(delta_time));
+
+                        let ubo = {
+                            let duration = Instant::now().duration_since(start_time);
+                            let elapsed = duration.as_millis() as f32;
+
+                            use ultraviolet::projection::perspective_vk as perspective;
+                            let projection = perspective(
+                                45f32.to_radians(),
+                                (size.width as f32) / (size.height as f32),
+                                1.0,
+                                10.0,
+                            );
+                            let model = Mat4::from_rotation_z(elapsed * 0.1f32.to_radians());
+                            let view = Mat4::look_at(
+                                Vec3::new(2.0, 2.0, 2.0),
+                                Vec3::zero(),
+                                Vec3::unit_z(),
+                            );
+                            CameraUBO::new(projection, model, view)
+                        };
+                        self.renderer.set_camera_ubo(ubo);
                     }
-                    let delta_time = Instant::now().duration_since(frame_start);
-                    callback(MyEvent::Update(delta_time));
-
-                    let ubo = {
-                        let duration = Instant::now().duration_since(start_time);
-                        let elapsed = duration.as_millis() as f32;
-
-                        use ultraviolet::projection::perspective_vk as perspective;
-                        let projection = perspective(
-                            45f32.to_radians(),
-                            (size.width as f32) / (size.height as f32),
-                            1.0,
-                            10.0,
-                        );
-                        let model = Mat4::from_rotation_z(elapsed * 0.1f32.to_radians());
-                        let view =
-                            Mat4::look_at(Vec3::new(2.0, 2.0, 2.0), Vec3::zero(), Vec3::unit_z());
-                        CameraUBO::new(projection, model, view)
-                    };
-                    self.renderer.set_camera_ubo(ubo);
+                    Event::LoopDestroyed => {
+                        callback(MyEvent::Destroyed);
+                        log::info!("closing this application");
+                    }
+                    _ => (),
                 }
-                Event::LoopDestroyed => {
-                    callback(MyEvent::Destroyed);
-                    log::info!("closing this application");
-                }
-                _ => (),
-            }
+            };
+            action();
 
+            // Assign `Platform` object back to `self`.
             self.egui = Some(egui);
         })
     }
