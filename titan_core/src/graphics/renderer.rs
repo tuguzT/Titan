@@ -28,7 +28,7 @@ use vulkano::pipeline::viewport::{Scissor, Viewport};
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::render_pass::{Framebuffer, FramebufferAbstract, RenderPass, Subpass};
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
-use vulkano::swapchain::{AcquireError, ColorSpace, PresentMode, Surface, Swapchain};
+use vulkano::swapchain::{AcquireError, PresentMode, Surface, Swapchain};
 use vulkano::sync::{FlushError, GpuFuture, SharingMode};
 use vulkano::{swapchain, sync};
 use vulkano_win::VkSurfaceBuild;
@@ -86,7 +86,7 @@ pub struct Renderer {
     egui_sampler: Arc<Sampler>,
 
     render_pass: Arc<RenderPass>,
-    depth_image: Arc<AttachmentImage>,
+    depth_buffer: Arc<AttachmentImage>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
     swapchain: Arc<Swapchain<Window>>,
     graphics_queue: Arc<Queue>,
@@ -187,37 +187,29 @@ impl Renderer {
         let transfer_queue = queues.next().unwrap_or_else(|| graphics_queue.clone());
 
         let (swapchain, swapchain_images) = {
-            let caps = surface.capabilities(physical_device)?;
-            let (format, color_space) = {
-                let formats = caps.supported_formats;
-                *formats
-                    .iter()
-                    .find(|(format, color_space)| {
-                        *format == Format::B8G8R8A8Srgb && *color_space == ColorSpace::SrgbNonLinear
-                    })
-                    .unwrap_or_else(|| &formats[0])
-            };
-            let present_mode = caps
+            let capabilities = surface.capabilities(physical_device)?;
+            let (format, color_space) = utils::suitable_image_format(&capabilities);
+            let present_mode = capabilities
                 .present_modes
                 .iter()
                 .find(|&mode| mode == PresentMode::Mailbox)
                 .unwrap_or(PresentMode::Fifo);
-            let dimensions = if let Some(current_extent) = caps.current_extent {
+            let dimensions = if let Some(current_extent) = capabilities.current_extent {
                 current_extent
             } else {
                 let window_size = surface.window().inner_size();
-                let min_width = caps.min_image_extent[0];
-                let max_width = caps.max_image_extent[0];
-                let min_height = caps.min_image_extent[1];
-                let max_height = caps.max_image_extent[1];
+                let min_width = capabilities.min_image_extent[0];
+                let max_width = capabilities.max_image_extent[0];
+                let min_height = capabilities.min_image_extent[1];
+                let max_height = capabilities.max_image_extent[1];
                 [
                     window_size.width.clamp(min_width, max_width),
                     window_size.height.clamp(min_height, max_height),
                 ]
             };
             let image_count = {
-                let image_count = caps.min_image_count + 1;
-                if let Some(max_image_count) = caps.max_image_count {
+                let image_count = capabilities.min_image_count + 1;
+                if let Some(max_image_count) = capabilities.max_image_count {
                     image_count.max(max_image_count)
                 } else {
                     image_count
@@ -235,33 +227,13 @@ impl Renderer {
                 .present_mode(present_mode)
                 .dimensions(dimensions)
                 .num_images(image_count)
-                .transform(caps.current_transform)
+                .transform(capabilities.current_transform)
                 .sharing_mode(sharing_mode)
                 .usage(ImageUsage::color_attachment())
                 .build()?
         };
 
-        let depth_format = {
-            let suitable_formats = [
-                Format::D32Sfloat,
-                Format::D32Sfloat_S8Uint,
-                Format::D24Unorm_S8Uint,
-            ];
-            *suitable_formats
-                .iter()
-                .find(|format| {
-                    let properties = format.properties(physical_device);
-                    properties.optimal_tiling_features.depth_stencil_attachment
-                })
-                .unwrap_or(&Format::D16Unorm)
-        };
-        let depth_image = AttachmentImage::with_usage(
-            device.clone(),
-            swapchain.dimensions(),
-            depth_format,
-            ImageUsage::depth_stencil_attachment(),
-        )?;
-
+        let depth_format = utils::suitable_depth_stencil_format(physical_device);
         let render_pass = Arc::new(vulkano::ordered_passes_renderpass! {
             device.clone(),
             attachments: {
@@ -274,7 +246,7 @@ impl Renderer {
                 depth: {
                     load: Clear,
                     store: DontCare,
-                    format: depth_image.format(),
+                    format: depth_format,
                     samples: 1,
                     initial_layout: ImageLayout::Undefined,
                     final_layout: ImageLayout::DepthStencilAttachmentOptimal,
@@ -287,6 +259,13 @@ impl Renderer {
         }?);
         let graphics_subpass = Subpass::from(render_pass.clone(), 0).unwrap();
         let ui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
+
+        let depth_buffer = AttachmentImage::with_usage(
+            device.clone(),
+            swapchain.dimensions(),
+            depth_format,
+            ImageUsage::depth_stencil_attachment(),
+        )?;
 
         let graphics_pipeline = {
             use super::shader::default::{fragment, vertex};
@@ -339,7 +318,7 @@ impl Renderer {
             swapchain_images.as_slice(),
             render_pass.clone(),
             &mut dynamic_state,
-            &depth_image,
+            &depth_buffer,
         )?;
 
         let vertex_buffer = {
@@ -413,7 +392,7 @@ impl Renderer {
             transfer_queue,
             swapchain,
             swapchain_images,
-            depth_image,
+            depth_buffer,
             render_pass,
             graphics_pipeline,
             ui_pipeline,
@@ -439,7 +418,7 @@ impl Renderer {
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<RenderPass>,
         dynamic_state: &mut DynamicState,
-        depth_image: &Arc<AttachmentImage>,
+        depth_buffer: &Arc<AttachmentImage>,
     ) -> Result<Vec<Arc<dyn FramebufferAbstract + Send + Sync>>, FramebuffersCreationError> {
         let dimensions = images[0].dimensions();
 
@@ -450,7 +429,7 @@ impl Renderer {
         };
         dynamic_state.viewports = Some(vec![viewport]);
 
-        let depth_image_view = ImageView::new(depth_image.clone())?;
+        let depth_image_view = ImageView::new(depth_buffer.clone())?;
         images
             .iter()
             .map(|image| {
@@ -478,17 +457,17 @@ impl Renderer {
         self.swapchain = swapchain;
         self.swapchain_images = swapchain_images;
 
-        self.depth_image = AttachmentImage::with_usage(
+        self.depth_buffer = AttachmentImage::with_usage(
             self.device.clone(),
             self.swapchain.dimensions(),
-            self.depth_image.format(),
+            self.depth_buffer.format(),
             ImageUsage::depth_stencil_attachment(),
         )?;
         self.framebuffers = Self::create_framebuffers(
             self.swapchain_images.as_slice(),
             self.render_pass.clone(),
             &mut self.dynamic_state,
-            &self.depth_image,
+            &self.depth_buffer,
         )?;
 
         self.recreate_swapchain = false;

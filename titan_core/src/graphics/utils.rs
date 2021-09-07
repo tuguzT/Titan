@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily};
 use vulkano::device::{DeviceExtensions, Features};
+use vulkano::format::Format;
 use vulkano::instance::{ApplicationInfo, Instance, InstanceCreationError};
-use vulkano::swapchain::Surface;
+use vulkano::swapchain::{Capabilities, ColorSpace, Surface};
 use vulkano_win::required_extensions;
 use winit::window::Window;
 
@@ -123,4 +124,41 @@ fn score(physical_device: &PhysicalDevice) -> u32 {
     };
     score += properties.max_image_dimension2_d;
     score
+}
+
+/// Depth stencil formats which are suitable for rendering backend.
+pub const SUITABLE_DEPTH_STENCIL_FORMATS: [Format; 3] = [
+    Format::D32Sfloat,
+    Format::D32Sfloat_S8Uint,
+    Format::D24Unorm_S8Uint,
+];
+
+/// Retrieves suitable depth stencil format (see [`SUITABLE_DEPTH_STENCIL_FORMATS`]),
+/// if supported by physical device.
+///
+/// If none of suitable depth stencil formats are supported,
+/// returns [`Format::D16Unorm`] which is guaranteed to be supported.
+pub fn suitable_depth_stencil_format(physical_device: PhysicalDevice) -> Format {
+    *SUITABLE_DEPTH_STENCIL_FORMATS
+        .iter()
+        .find(|format| {
+            let properties = format.properties(physical_device);
+            properties.optimal_tiling_features.depth_stencil_attachment
+        })
+        .unwrap_or(&Format::D16Unorm)
+}
+
+/// Image format which is suitable for rendering backend.
+pub const SUITABLE_IMAGE_FORMAT: (Format, ColorSpace) =
+    (Format::B8G8R8A8Srgb, ColorSpace::SrgbNonLinear);
+
+/// Retrieves suitable image format if supported by physical device.
+///
+/// If none of suitable image formats are supported, returns first supported format.
+pub fn suitable_image_format(capabilities: &Capabilities) -> (Format, ColorSpace) {
+    let formats = &capabilities.supported_formats;
+    *formats
+        .iter()
+        .find(|&&format| SUITABLE_IMAGE_FORMAT == format)
+        .unwrap_or_else(|| &formats[0])
 }
