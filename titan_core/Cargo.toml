@@ -3,6 +3,8 @@ name = "titan_core"
 version = "0.1.0"
 authors = ["tuguzT <timurka.tugushev@gmail.com>"]
 description = "API for simple game engine based on Rust and Vulkan API"
+repository = "https://github.com/tuguzT/titan_rs"
+readme = "../README.md"
 edition = "2018"
 
 [lib]
