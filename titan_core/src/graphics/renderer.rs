@@ -1,12 +1,13 @@
 //! Render utilities for graphics backend for game engine.
 
 use std::collections::HashSet;
+use std::iter;
 use std::sync::Arc;
 
 use egui::{ClippedMesh, Pos2, Texture};
 use palette::Srgba;
 use ultraviolet::Vec3;
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, CpuBufferPool, DeviceLocalBuffer, ImmutableBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, PrimaryAutoCommandBuffer,
     SubpassContents,
@@ -70,7 +71,7 @@ pub struct Renderer {
     camera_ubo: CameraUBO,
 
     ub_descriptor_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
-    uniform_buffers: Vec<Arc<CpuAccessibleBuffer<CameraUBO>>>,
+    uniform_buffers: Vec<Arc<DeviceLocalBuffer<CameraUBO>>>,
     index_buffer: Arc<ImmutableBuffer<[u32]>>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
     ui_vertex_buffer: Arc<CpuBufferPool<UiVertex>>,
@@ -362,11 +363,10 @@ impl Renderer {
         let uniform_buffers = swapchain_images
             .iter()
             .map(|_| {
-                CpuAccessibleBuffer::from_data(
+                DeviceLocalBuffer::new(
                     device.clone(),
                     BufferUsage::uniform_buffer_transfer_destination(),
-                    false,
-                    CameraUBO::default(),
+                    iter::once(transfer_queue.family()),
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
