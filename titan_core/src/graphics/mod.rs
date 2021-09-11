@@ -7,6 +7,7 @@ pub(crate) mod camera;
 
 mod debug_callback;
 mod error;
+mod frame;
 mod renderer;
 mod shader;
 mod utils;

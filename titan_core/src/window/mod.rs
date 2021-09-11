@@ -36,9 +36,21 @@ impl Size {
     }
 }
 
+impl From<[u32; 2]> for Size {
+    fn from(array: [u32; 2]) -> Self {
+        Self::new(array[0], array[1])
+    }
+}
+
+impl From<Size> for [u32; 2] {
+    fn from(size: Size) -> Self {
+        [size.width, size.height]
+    }
+}
+
 impl From<(u32, u32)> for Size {
     fn from(tuple: (u32, u32)) -> Self {
-        Size::new(tuple.0, tuple.1)
+        Self::new(tuple.0, tuple.1)
     }
 }
 
