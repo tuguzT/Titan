@@ -1,28 +1,21 @@
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::Arc;
 
-use thiserror::Error;
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, AutoCommandBufferBuilderContextError, BeginRenderPassError,
-    BuildError, CommandBufferExecError, CommandBufferUsage, ExecuteCommandsError,
-    PrimaryAutoCommandBuffer, SecondaryCommandBuffer, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, SecondaryCommandBuffer,
+    SubpassContents,
 };
 use vulkano::device::Queue;
 use vulkano::format::{ClearValue, Format};
-use vulkano::image::view::{ImageView, ImageViewCreationError};
-use vulkano::image::{AttachmentImage, ImageAccess, ImageCreationError, ImageUsage};
-use vulkano::render_pass::{
-    Framebuffer, FramebufferAbstract, FramebufferCreationError, RenderPass, RenderPassCreationError,
-};
+use vulkano::image::view::ImageView;
+use vulkano::image::{AttachmentImage, ImageAccess, ImageUsage};
+use vulkano::render_pass::{Framebuffer, FramebufferAbstract, RenderPass, Subpass};
 use vulkano::sync::GpuFuture;
-use vulkano::OomError;
+
+use error::{DrawPassExecuteError, FrameCreationError, FrameSystemCreationError, NextPassError};
 
 use crate::{graphics::utils, window::Size};
 
-type Framebuffers =
-    HashMap<Arc<dyn ImageAccess + Send + Sync>, Arc<dyn FramebufferAbstract + Send + Sync>>;
+pub mod error;
 
 /// System that contains the necessary facilities for rendering a single frame.
 pub struct FrameSystem {
@@ -35,9 +28,6 @@ pub struct FrameSystem {
     /// Intermediate render target that will contain the depth of each pixel of the scene.
     /// This is a traditional depth buffer. `0.0` means "near", and `1.0` means "far".
     depth_buffer: Option<Arc<AttachmentImage>>,
-
-    /// Framebuffers which are used when starting the render pass.
-    framebuffers: Framebuffers,
 }
 
 impl FrameSystem {
@@ -84,8 +74,17 @@ impl FrameSystem {
             graphics_queue,
             render_pass,
             depth_buffer: None,
-            framebuffers: Framebuffers::new(),
         })
+    }
+
+    /// Retrieve subpass for object rendering.
+    pub fn object_subpass(&self) -> Subpass {
+        Subpass::from(self.render_pass.clone(), 0).unwrap()
+    }
+
+    /// Retrieve subpass for UI rendering.
+    pub fn ui_subpass(&self) -> Subpass {
+        Subpass::from(self.render_pass.clone(), 1).unwrap()
     }
 
     /// Starts drawing a new frame.
@@ -95,9 +94,8 @@ impl FrameSystem {
         final_image: Arc<I>,
     ) -> Result<Frame, FrameCreationError>
     where
-        F: GpuFuture + 'static,
-        I: ImageAccess + Send + Sync + Eq + Hash + 'static,
-        Arc<dyn ImageAccess + Send + Sync>: Borrow<Arc<I>>,
+        F: GpuFuture + Send + Sync + 'static,
+        I: ImageAccess + Send + Sync + 'static,
     {
         let device = self.graphics_queue.device().clone();
 
@@ -121,25 +119,27 @@ impl FrameSystem {
                 )?
             };
             self.depth_buffer = Some(depth_buffer.clone());
+        }
 
-            // (Re)create framebuffer.
-            let framebuffer = {
-                let image_view = ImageView::new(final_image.clone())?;
-                let depth_buffer_view = ImageView::new(depth_buffer)?;
+        // Create framebuffer.
+        let framebuffer = {
+            let image_view = ImageView::new(final_image.clone())?;
+            let depth_buffer_view = {
+                let depth_buffer = self.depth_buffer.as_ref().unwrap().clone();
+                ImageView::new(depth_buffer)?
+            };
+            Arc::new(
                 Framebuffer::start(self.render_pass.clone())
                     .add(image_view)?
                     .add(depth_buffer_view)?
-                    .build()?
-            };
-            self.framebuffers
-                .insert(final_image.clone(), Arc::new(framebuffer));
-        }
+                    .build()?,
+            )
+        };
 
         let clear_values = [
             ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
             ClearValue::Depth(1.0),
         ];
-        let framebuffer = self.framebuffers.get(&final_image).cloned().unwrap();
 
         // Build primary command buffer that will execute secondary command buffers
         // in rendering process.
@@ -173,7 +173,7 @@ pub struct Frame<'a> {
     subpass_number: u8,
 
     /// Future to wait upon before the main rendering.
-    before_future: Option<Box<dyn GpuFuture>>,
+    before_future: Option<Box<dyn GpuFuture + Send + Sync>>,
 
     /// Framebuffer that was used when starting the render pass.
     framebuffer: Arc<dyn FramebufferAbstract + Send + Sync>,
@@ -225,7 +225,7 @@ impl<'a> Frame<'a> {
             }
 
             // The frame is in the finished state and we can't do anything.
-            3.. => Ok(None),
+            _ => Ok(None),
         }
     }
 }
@@ -242,7 +242,7 @@ pub enum Pass<'f, 's: 'f> {
 
     /// The frame has been fully prepared, and here is the future that will perform the drawing
     /// on the image.
-    Finished(Box<dyn GpuFuture>),
+    Finished(Box<dyn GpuFuture + Send + Sync>),
 }
 
 /// Allows the user to draw objects on the scene.
@@ -269,49 +269,4 @@ impl<'f, 's: 'f> DrawPass<'f, 's> {
         let dimensions = self.frame.framebuffer.dimensions();
         Size::new(dimensions[0], dimensions[1])
     }
-}
-
-#[derive(Debug, Error)]
-pub enum FrameSystemCreationError {
-    #[error("queue family must support graphics operations")]
-    QueueFamilyNotSupported,
-
-    #[error("render pass creation failure: {0}")]
-    RenderPassCreation(#[from] RenderPassCreationError),
-}
-
-#[derive(Debug, Error)]
-pub enum FrameCreationError {
-    #[error("frame command buffer allocation failure: {0}")]
-    OutOfMemory(#[from] OomError),
-
-    #[error("begin render pass command failure: {0}")]
-    BeginRenderPass(#[from] BeginRenderPassError),
-
-    #[error("failed to recreate an image for the frame: {0}")]
-    ImageCreation(#[from] ImageCreationError),
-
-    #[error("failed to create an image view for the frame: {0}")]
-    ImageViewCreation(#[from] ImageViewCreationError),
-
-    #[error("failed to create framebuffer for the frame: {0}")]
-    FramebufferCreation(#[from] FramebufferCreationError),
-}
-
-#[derive(Debug, Error)]
-pub enum NextPassError {
-    #[error("next pass command buffer building error: {0}")]
-    WrongUsage(#[from] AutoCommandBufferBuilderContextError),
-
-    #[error("next pass command buffer build failure: {0}")]
-    Build(#[from] BuildError),
-
-    #[error("next pass command buffer execution failure: {0}")]
-    Execution(#[from] CommandBufferExecError),
-}
-
-#[derive(Debug, Error)]
-pub enum DrawPassExecuteError {
-    #[error("draw pass secondary command buffer execution failure: {0}")]
-    Execution(#[from] ExecuteCommandsError),
 }

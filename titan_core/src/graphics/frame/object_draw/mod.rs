@@ -1,25 +1,30 @@
 use std::sync::Arc;
 
 use palette::Srgba;
-use thiserror::Error;
 use ultraviolet::Vec3;
-use vulkano::buffer::{BufferUsage, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, ImmutableBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, BuildError, CommandBufferUsage, DrawIndexedError, DynamicState,
-    SecondaryAutoCommandBuffer,
+    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SecondaryAutoCommandBuffer,
 };
-use vulkano::descriptor_set::DescriptorSetsCollection;
+use vulkano::descriptor_set::FixedSizeDescriptorSetsPool;
 use vulkano::device::Queue;
-use vulkano::memory::DeviceMemoryAllocError;
 use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineCreationError};
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::render_pass::Subpass;
-use vulkano::sync::{FlushError, GpuFuture};
-use vulkano::OomError;
+use vulkano::sync::GpuFuture;
 
-use crate::graphics::vertex::Vertex;
-use crate::window::Size;
+use crate::{
+    graphics::{
+        camera::CameraUBO,
+        frame::object_draw::error::{ObjectDrawError, ObjectDrawSystemCreationError},
+        renderer::error::DescriptorSetCreationError,
+        vertex::Vertex,
+    },
+    window::Size,
+};
+
+pub mod error;
 
 const fn indices() -> [u32; 12] {
     [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4]
@@ -51,6 +56,9 @@ pub struct ObjectDrawSystem {
 
     /// Graphics pipeline used for rendering of game objects.
     pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
+
+    /// Pool of descriptor sets of uniform buffers with data for vertex shader.
+    descriptor_set_pool: FixedSizeDescriptorSetsPool,
 }
 
 impl ObjectDrawSystem {
@@ -107,29 +115,36 @@ impl ObjectDrawSystem {
             index_buffer
         };
 
+        let descriptor_set_pool = {
+            let layout = &pipeline.layout().descriptor_set_layouts()[0];
+            FixedSizeDescriptorSetsPool::new(layout.clone())
+        };
+
         Ok(Self {
             graphics_queue,
             vertex_buffer,
             index_buffer,
             pipeline,
+            descriptor_set_pool,
         })
     }
 
     /// Builds a secondary command buffer that draws game objects on the current subpass.
-    pub fn draw<S, Pc>(
-        &self,
+    pub fn draw<B>(
+        &mut self,
         viewport_size: Size,
-        descriptor_sets: S,
-    ) -> Result<SecondaryAutoCommandBuffer, DrawError>
+        uniform_buffer: B,
+    ) -> Result<SecondaryAutoCommandBuffer, ObjectDrawError>
     where
-        S: DescriptorSetsCollection,
+        B: TypedBufferAccess<Content = CameraUBO> + Send + Sync + 'static,
     {
         let mut builder = AutoCommandBufferBuilder::secondary_graphics(
             self.graphics_queue.device().clone(),
             self.graphics_queue.family(),
             CommandBufferUsage::OneTimeSubmit,
-            self.pipeline.clone().subpass(),
+            self.pipeline.subpass().clone(),
         )?;
+
         let dynamic_state = DynamicState {
             viewports: Some(vec![Viewport {
                 origin: [0.0, 0.0],
@@ -138,44 +153,26 @@ impl ObjectDrawSystem {
             }]),
             ..DynamicState::none()
         };
+
+        let descriptor_set = {
+            let descriptor_set = self
+                .descriptor_set_pool
+                .next()
+                .add_buffer(uniform_buffer)
+                .map_err(DescriptorSetCreationError::from)?
+                .build()
+                .map_err(DescriptorSetCreationError::from)?;
+            Arc::new(descriptor_set)
+        };
+
         builder.draw_indexed(
             self.pipeline.clone(),
             &dynamic_state,
             self.vertex_buffer.clone(),
             self.index_buffer.clone(),
-            descriptor_sets,
+            descriptor_set,
             (),
         )?;
         Ok(builder.build()?)
     }
-}
-
-#[derive(Debug, Error)]
-pub enum ObjectDrawSystemCreationError {
-    #[error("shader module allocation failure: {0}")]
-    OutOfMemory(#[from] OomError),
-
-    #[error("queue family must support graphics operations")]
-    QueueFamilyNotSupported,
-
-    #[error("graphics pipeline creation failure: {0}")]
-    GraphicsPipelineCreation(#[from] GraphicsPipelineCreationError),
-
-    #[error("vertex/index buffer creation failure: {0}")]
-    BufferCreation(#[from] FlushError),
-
-    #[error("vertex/index buffer allocation failure: {0}")]
-    BufferAllocation(#[from] DeviceMemoryAllocError),
-}
-
-#[derive(Debug, Error)]
-pub enum DrawError {
-    #[error("command buffer allocation failure: {0}")]
-    OutOfMemory(#[from] OomError),
-
-    #[error("draw indexed command failure: {0}")]
-    DrawIndexed(#[from] DrawIndexedError),
-
-    #[error("draw command buffer build failure: {0}")]
-    CommandBufferBuild(#[from] BuildError),
 }

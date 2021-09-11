@@ -1,3 +1,3 @@
-mod object_draw;
-mod system;
-mod ui_draw;
+pub mod object_draw;
+pub mod system;
+pub mod ui_draw;
