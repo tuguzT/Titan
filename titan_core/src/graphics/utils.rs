@@ -35,7 +35,7 @@ pub fn create_instance(config: &Config) -> Result<Arc<Instance>, InstanceCreatio
         engine_version: Some(self::to_vk_version(&*ENGINE_VERSION)),
     };
     let extensions = {
-        let mut extensions = self::required_extensions();
+        let mut extensions = required_extensions();
         if config.enable_validation() {
             extensions.ext_debug_utils = true;
         }

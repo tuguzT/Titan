@@ -44,6 +44,7 @@ impl FrameSystem {
         let device = graphics_queue.device().clone();
         let depth_format = utils::suitable_depth_stencil_format(device.physical_device());
 
+        // TODO: vulkano error: https://github.com/vulkano-rs/vulkano/issues/1665
         let render_pass = Arc::new(vulkano::ordered_passes_renderpass! {
             graphics_queue.device().clone(),
             attachments: {

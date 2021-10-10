@@ -179,12 +179,16 @@ impl Renderer {
                     image_count
                 }
             };
-            let sharing_mode = if present_family.is_some() {
-                let queues = [&graphics_queue, &present_queue];
-                SharingMode::from(&queues[..])
-            } else {
-                SharingMode::from(&graphics_queue)
-            };
+            let sharing_mode = present_family
+                .as_ref()
+                .map(|present_family| {
+                    (present_family.id() != graphics_family.id()).then(|| {
+                        let queues = [&graphics_queue, &present_queue];
+                        SharingMode::from(&queues[..])
+                    })
+                })
+                .flatten()
+                .unwrap_or_else(|| SharingMode::from(&graphics_queue));
             Swapchain::start(device.clone(), surface.clone())
                 .format(format)
                 .color_space(color_space)
