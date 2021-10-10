@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use vulkano::command_buffer::{BuildError, CommandBufferExecError, UpdateBufferError};
-use vulkano::descriptor_set::{PersistentDescriptorSetBuildError, PersistentDescriptorSetError};
+use vulkano::descriptor_set::DescriptorSetError;
 use vulkano::device::DeviceCreationError;
 use vulkano::instance::debug::DebugCallbackCreationError;
 use vulkano::instance::InstanceCreationError;
@@ -59,11 +59,8 @@ pub enum RendererCreationError {
 /// Error that can happen on descriptor set creation.
 #[derive(Debug, Error)]
 pub enum DescriptorSetCreationError {
-    #[error("persistent descriptor set addition failure: {0}")]
-    Addition(#[from] PersistentDescriptorSetError),
-
     #[error("persistent descriptor set build failure: {0}")]
-    Build(#[from] PersistentDescriptorSetBuildError),
+    Build(#[from] DescriptorSetError),
 }
 
 /// Error that can happen on resizing of [`Renderer`](super::Renderer) system.

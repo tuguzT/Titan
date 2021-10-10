@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use egui::{ClippedMesh, Pos2, Texture};
-use vulkano::buffer::{BufferUsage, CpuBufferPool};
+use vulkano::buffer::{BufferUsage, CpuBufferPool, TypedBufferAccess};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SecondaryAutoCommandBuffer,
+    AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
 };
 use vulkano::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::Queue;
@@ -11,9 +11,8 @@ use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{ImageDimensions, ImmutableImage, MipmapsCount};
 use vulkano::pipeline::blend::{AttachmentBlend, BlendFactor};
-use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::{Scissor, Viewport};
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
+use vulkano::pipeline::{GraphicsPipeline, PipelineBindPoint};
 use vulkano::render_pass::Subpass;
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 use vulkano::sync::GpuFuture;
@@ -40,7 +39,7 @@ pub struct UiDrawSystem {
     index_buffer: Arc<CpuBufferPool<u32>>,
 
     /// Graphics pipeline used for rendering of UI.
-    pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
+    pipeline: Arc<GraphicsPipeline>,
 
     /// Version of `egui` base texture.
     texture_version: u64,
@@ -152,7 +151,7 @@ impl UiDrawSystem {
                     data.into_iter(),
                     dimensions,
                     MipmapsCount::One,
-                    Format::R8G8B8A8Unorm,
+                    Format::R8G8B8A8_UNORM,
                     self.graphics_queue.clone(),
                 )?;
                 image_future.flush()?;
@@ -161,7 +160,8 @@ impl UiDrawSystem {
 
             let view = ImageView::new(image)?;
             let set = {
-                let builder = PersistentDescriptorSet::start(layout)
+                let mut builder = PersistentDescriptorSet::start(layout);
+                builder
                     .add_sampled_image(view, self.sampler.clone())
                     .map_err(DescriptorSetCreationError::from)?;
                 let set = builder.build().map_err(DescriptorSetCreationError::from)?;
@@ -201,21 +201,12 @@ impl UiDrawSystem {
                     y: max.y.clamp(min.y, height),
                 };
                 Scissor {
-                    origin: [min.x.round() as i32, min.y.round() as i32],
+                    origin: [min.x.round() as u32, min.y.round() as u32],
                     dimensions: [
                         (max.x.round() - min.x) as u32,
                         (max.y.round() - min.y) as u32,
                     ],
                 }
-            };
-            let dynamic_state = DynamicState {
-                viewports: Some(vec![Viewport {
-                    origin: [0.0, 0.0],
-                    dimensions: [viewport_size.width as f32, viewport_size.height as f32],
-                    depth_range: 0.0..1.0,
-                }]),
-                scissors: Some(vec![scissor]),
-                ..DynamicState::none()
             };
 
             let chunk = mesh.vertices.into_iter().map(UiVertex::from);
@@ -224,15 +215,26 @@ impl UiDrawSystem {
             let chunk = mesh.indices.into_iter();
             let index_buffer = self.index_buffer.chunk(chunk)?;
 
+            let viewport = Viewport {
+                origin: [0.0, 0.0],
+                dimensions: [viewport_size.width as f32, viewport_size.height as f32],
+                depth_range: 0.0..1.0,
+            };
             let descriptor_sets = self.texture_descriptor_set.as_ref().unwrap().clone();
-            builder.draw_indexed(
-                self.pipeline.clone(),
-                &dynamic_state,
-                vertex_buffer,
-                index_buffer,
-                descriptor_sets,
-                push_constants,
-            )?;
+            builder
+                .set_viewport(0, std::iter::once(viewport))
+                .set_scissor(0, std::iter::once(scissor))
+                .bind_pipeline_graphics(self.pipeline.clone())
+                .bind_vertex_buffers(0, vertex_buffer)
+                .bind_index_buffer(index_buffer.clone())
+                .bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    self.pipeline.layout().clone(),
+                    0,
+                    descriptor_sets,
+                )
+                .push_constants(self.pipeline.layout().clone(), 0, push_constants)
+                .draw_indexed(index_buffer.len() as u32, 0, 0, 0, 0)?;
         }
 
         Ok(builder.build()?)

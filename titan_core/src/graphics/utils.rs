@@ -35,7 +35,7 @@ pub fn create_instance(config: &Config) -> Result<Arc<Instance>, InstanceCreatio
         engine_version: Some(self::to_vk_version(&*ENGINE_VERSION)),
     };
     let extensions = {
-        let mut extensions = self::required_extensions();
+        let mut extensions = required_extensions();
         if config.enable_validation() {
             extensions.ext_debug_utils = true;
         }
@@ -128,9 +128,9 @@ fn score(physical_device: &PhysicalDevice) -> u32 {
 
 /// Depth stencil formats which are suitable for rendering backend.
 pub const SUITABLE_DEPTH_STENCIL_FORMATS: [Format; 3] = [
-    Format::D32Sfloat,
-    Format::D32Sfloat_S8Uint,
-    Format::D24Unorm_S8Uint,
+    Format::D32_SFLOAT,
+    Format::D32_SFLOAT_S8_UINT,
+    Format::D24_UNORM_S8_UINT,
 ];
 
 /// Retrieves suitable depth stencil format (see [`SUITABLE_DEPTH_STENCIL_FORMATS`]),
@@ -145,12 +145,12 @@ pub fn suitable_depth_stencil_format(physical_device: PhysicalDevice) -> Format 
             let properties = format.properties(physical_device);
             properties.optimal_tiling_features.depth_stencil_attachment
         })
-        .unwrap_or(&Format::D16Unorm)
+        .unwrap_or(&Format::D16_UNORM)
 }
 
 /// Image format which is suitable for rendering backend.
 pub const SUITABLE_IMAGE_FORMAT: (Format, ColorSpace) =
-    (Format::B8G8R8A8Srgb, ColorSpace::SrgbNonLinear);
+    (Format::B8G8R8A8_SRGB, ColorSpace::SrgbNonLinear);
 
 /// Retrieves suitable image format if supported by physical device.
 ///

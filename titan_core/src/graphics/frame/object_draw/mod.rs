@@ -4,13 +4,12 @@ use palette::Srgba;
 use ultraviolet::Vec3;
 use vulkano::buffer::{BufferUsage, ImmutableBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, DynamicState, SecondaryAutoCommandBuffer,
+    AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
 };
-use vulkano::descriptor_set::FixedSizeDescriptorSetsPool;
+use vulkano::descriptor_set::SingleLayoutDescSetPool;
 use vulkano::device::Queue;
-use vulkano::pipeline::vertex::BuffersDefinition;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
+use vulkano::pipeline::{GraphicsPipeline, PipelineBindPoint};
 use vulkano::render_pass::Subpass;
 use vulkano::sync::GpuFuture;
 
@@ -55,10 +54,10 @@ pub struct ObjectDrawSystem {
     index_buffer: Arc<ImmutableBuffer<[u32]>>,
 
     /// Graphics pipeline used for rendering of game objects.
-    pipeline: Arc<GraphicsPipeline<BuffersDefinition>>,
+    pipeline: Arc<GraphicsPipeline>,
 
     /// Pool of descriptor sets of uniform buffers with data for vertex shader.
-    descriptor_set_pool: FixedSizeDescriptorSetsPool,
+    descriptor_set_pool: SingleLayoutDescSetPool,
 }
 
 impl ObjectDrawSystem {
@@ -117,7 +116,7 @@ impl ObjectDrawSystem {
 
         let descriptor_set_pool = {
             let layout = &pipeline.layout().descriptor_set_layouts()[0];
-            FixedSizeDescriptorSetsPool::new(layout.clone())
+            SingleLayoutDescSetPool::new(layout.clone())
         };
 
         Ok(Self {
@@ -133,7 +132,7 @@ impl ObjectDrawSystem {
     pub fn draw<B>(
         &mut self,
         viewport_size: Size,
-        uniform_buffer: B,
+        uniform_buffer: Arc<B>,
     ) -> Result<SecondaryAutoCommandBuffer, ObjectDrawError>
     where
         B: TypedBufferAccess<Content = CameraUBO> + Send + Sync + 'static,
@@ -145,34 +144,32 @@ impl ObjectDrawSystem {
             self.pipeline.subpass().clone(),
         )?;
 
-        let dynamic_state = DynamicState {
-            viewports: Some(vec![Viewport {
-                origin: [0.0, 0.0],
-                dimensions: [viewport_size.width as f32, viewport_size.height as f32],
-                depth_range: 0.0..1.0,
-            }]),
-            ..DynamicState::none()
-        };
-
-        let descriptor_set = {
-            let descriptor_set = self
-                .descriptor_set_pool
-                .next()
+        let descriptor_sets = {
+            let mut builder = self.descriptor_set_pool.next();
+            builder
                 .add_buffer(uniform_buffer)
-                .map_err(DescriptorSetCreationError::from)?
-                .build()
                 .map_err(DescriptorSetCreationError::from)?;
+            let descriptor_set = builder.build().map_err(DescriptorSetCreationError::from)?;
             Arc::new(descriptor_set)
         };
 
-        builder.draw_indexed(
-            self.pipeline.clone(),
-            &dynamic_state,
-            self.vertex_buffer.clone(),
-            self.index_buffer.clone(),
-            descriptor_set,
-            (),
-        )?;
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [viewport_size.width as f32, viewport_size.height as f32],
+            depth_range: 0.0..1.0,
+        };
+        builder
+            .set_viewport(0, std::iter::once(viewport))
+            .bind_pipeline_graphics(self.pipeline.clone())
+            .bind_vertex_buffers(0, self.vertex_buffer.clone())
+            .bind_index_buffer(self.index_buffer.clone())
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                self.pipeline.layout().clone(),
+                0,
+                descriptor_sets,
+            )
+            .draw_indexed(self.index_buffer.len() as u32, 0, 0, 0, 0)?;
         Ok(builder.build()?)
     }
 }
