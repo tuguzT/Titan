@@ -169,7 +169,7 @@ impl ObjectDrawSystem {
                 0,
                 descriptor_sets,
             )
-            .draw_indexed(self.index_buffer.len() as u32, 0, 0, 0, 0)?;
+            .draw_indexed(self.index_buffer.len() as u32, 1, 0, 0, 0)?;
         Ok(builder.build()?)
     }
 }

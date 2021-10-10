@@ -234,7 +234,7 @@ impl UiDrawSystem {
                     descriptor_sets,
                 )
                 .push_constants(self.pipeline.layout().clone(), 0, push_constants)
-                .draw_indexed(index_buffer.len() as u32, 0, 0, 0, 0)?;
+                .draw_indexed(index_buffer.len() as u32, 1, 0, 0, 0)?;
         }
 
         Ok(builder.build()?)
