@@ -2,7 +2,6 @@
 
 /// Default shaders which are used in game engine.
 pub mod default {
-
     /// Default vertex shader utilities.
     pub mod vertex {
         vulkano_shaders::shader! {
@@ -22,7 +21,6 @@ pub mod default {
 
 /// Shaders which are used in UI rendering.
 pub mod ui {
-
     /// UI vertex shader utilities.
     pub mod vertex {
         vulkano_shaders::shader! {

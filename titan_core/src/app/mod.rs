@@ -1,9 +1,9 @@
 //! Utilities for engine initialization.
 
-use egui::TextureId;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use egui::TextureId;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use image::RgbaImage;
 use thiserror::Error;
