@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use egui::{ClippedMesh, Pos2, Texture};
+use egui::{ClippedMesh, Pos2, Texture, TextureId};
+use slotmap::{DefaultKey, Key, KeyData, SlotMap};
 use vulkano::buffer::{BufferUsage, CpuBufferPool, TypedBufferAccess};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
@@ -9,7 +10,7 @@ use vulkano::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageDimensions, ImmutableImage, MipmapsCount};
+use vulkano::image::{ImageDimensions, ImageViewAbstract, ImmutableImage, MipmapsCount};
 use vulkano::pipeline::blend::{AttachmentBlend, BlendFactor};
 use vulkano::pipeline::viewport::{Scissor, Viewport};
 use vulkano::pipeline::{GraphicsPipeline, PipelineBindPoint};
@@ -46,6 +47,9 @@ pub struct UiDrawSystem {
 
     /// Descriptor set for `egui` base texture that will be used by shader.
     texture_descriptor_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
+
+    /// Collection of descriptor sets for user textures to be drawn in UI.
+    user_texture_descriptor_sets: SlotMap<DefaultKey, Arc<dyn DescriptorSet + Send + Sync>>,
 
     /// A sampler for textures used in UI rendering.
     sampler: Arc<Sampler>,
@@ -116,7 +120,41 @@ impl UiDrawSystem {
             sampler,
             texture_version: 0,
             texture_descriptor_set: None,
+            user_texture_descriptor_sets: SlotMap::default(),
         })
+    }
+
+    fn image_descriptor_set(
+        &self,
+        image_view: Arc<dyn ImageViewAbstract + Send + Sync>,
+    ) -> Result<Arc<PersistentDescriptorSet>, DescriptorSetCreationError> {
+        let layout = self.pipeline.layout().descriptor_set_layouts()[0].clone();
+        let mut builder = PersistentDescriptorSet::start(layout);
+        builder
+            .add_sampled_image(image_view, self.sampler.clone())
+            .map_err(DescriptorSetCreationError::from)?;
+        let set = builder.build().map_err(DescriptorSetCreationError::from)?;
+        Ok(Arc::new(set))
+    }
+
+    /// Registers new user texture to be drawn in UI.
+    pub fn register_texture(
+        &mut self,
+        image_view: Arc<dyn ImageViewAbstract + Send + Sync>,
+    ) -> Result<TextureId, DescriptorSetCreationError> {
+        let descriptor_set = self.image_descriptor_set(image_view)?;
+        let key = self.user_texture_descriptor_sets.insert(descriptor_set);
+        let id = key.data().as_ffi();
+        Ok(TextureId::User(id))
+    }
+
+    /// Unregisters previously registered user texture to be drawn in UI.
+    pub fn unregister_texture(&mut self, texture_id: TextureId) {
+        if let TextureId::User(id) = texture_id {
+            let key_data = KeyData::from_ffi(id);
+            let key = DefaultKey::from(key_data);
+            self.user_texture_descriptor_sets.remove(key);
+        }
     }
 
     /// Builds a secondary command buffer that draws UI on the current subpass.
@@ -138,7 +176,6 @@ impl UiDrawSystem {
 
         if texture.version != self.texture_version {
             self.texture_version = texture.version;
-            let layout = self.pipeline.layout().descriptor_set_layouts()[0].clone();
             let image = {
                 let dimensions = ImageDimensions::Dim2d {
                     width: texture.width as u32,
@@ -158,15 +195,8 @@ impl UiDrawSystem {
                 image
             };
 
-            let view = ImageView::new(image)?;
-            let set = {
-                let mut builder = PersistentDescriptorSet::start(layout);
-                builder
-                    .add_sampled_image(view, self.sampler.clone())
-                    .map_err(DescriptorSetCreationError::from)?;
-                let set = builder.build().map_err(DescriptorSetCreationError::from)?;
-                Arc::new(set)
-            };
+            let image = ImageView::new(image)?;
+            let set = self.image_descriptor_set(image)?;
             self.texture_descriptor_set = Some(set);
         }
 
@@ -220,7 +250,17 @@ impl UiDrawSystem {
                 dimensions: [viewport_size.width as f32, viewport_size.height as f32],
                 depth_range: 0.0..1.0,
             };
-            let descriptor_sets = self.texture_descriptor_set.as_ref().unwrap().clone();
+            let descriptor_sets = match mesh.texture_id {
+                TextureId::Egui => self.texture_descriptor_set.as_ref().unwrap().clone(),
+                TextureId::User(id) => {
+                    let key_data = KeyData::from_ffi(id);
+                    let key = DefaultKey::from(key_data);
+                    self.user_texture_descriptor_sets
+                        .get(key)
+                        .expect("User texture was unregistered, but still in use!")
+                        .clone()
+                }
+            };
             builder
                 .set_viewport(0, std::iter::once(viewport))
                 .set_scissor(0, std::iter::once(scissor))

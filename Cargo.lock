@@ -1605,6 +1605,7 @@ dependencies = [
  "log",
  "palette",
  "semver",
+ "slotmap",
  "thiserror",
  "ultraviolet",
  "vulkano",
