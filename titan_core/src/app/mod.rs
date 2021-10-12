@@ -1,9 +1,11 @@
 //! Utilities for engine initialization.
 
+use egui::TextureId;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use egui_winit_platform::{Platform, PlatformDescriptor};
+use image::RgbaImage;
 use thiserror::Error;
 use ultraviolet::{Mat4, Vec3};
 use winit::event::{Event, StartCause, WindowEvent};
@@ -12,7 +14,7 @@ use winit::window::Window;
 
 use crate::{
     config::Config,
-    graphics::{camera::CameraUBO, Renderer, RendererCreationError},
+    graphics::{camera::CameraUBO, error::ImageRegisterError, Renderer, RendererCreationError},
     window::{Event as MyEvent, Size},
 };
 
@@ -66,6 +68,13 @@ impl Application {
     /// Returns underlying window of this application.
     pub fn window(&self) -> &Window {
         self.renderer.window()
+    }
+
+    pub fn register_ui_image(
+        &mut self,
+        image: &RgbaImage,
+    ) -> std::result::Result<TextureId, ImageRegisterError> {
+        self.renderer.register_ui_image(image)
     }
 
     /// Starts execution of game engine.

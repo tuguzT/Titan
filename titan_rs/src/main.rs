@@ -3,8 +3,10 @@
 #![windows_subsystem = "windows"]
 
 use std::error::Error;
+use std::io::Cursor;
 
-use egui::{TextureId, TopBottomPanel, Window};
+use egui::{TopBottomPanel, Window};
+use image::ImageFormat;
 
 use titan_core::{app::DeltaTime, config::Config, window::Event};
 
@@ -28,7 +30,14 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let mut fps = 0;
     let mut prev_fps = 0;
 
-    let application = titan_core::init(config)?;
+    let mut application = titan_core::init(config)?;
+
+    let image_data = include_bytes!("../res/angry flop.jpg");
+    let image = image::io::Reader::with_format(Cursor::new(image_data), ImageFormat::Jpeg)
+        .decode()?
+        .to_rgba8();
+    let texture_id = application.register_ui_image(&image)?;
+
     application.run(move |event| match event {
         Event::Created => {
             log::debug!("created");
@@ -63,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 .collapsible(false)
                 .resizable(false)
                 .show(&ctx, |ui| {
-                    ui.image(TextureId::Egui, [300.0, 80.0]);
+                    ui.image(texture_id, [300.0, 300.0]);
                 });
         }
         Event::Destroyed => {

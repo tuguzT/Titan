@@ -4,14 +4,17 @@ use std::collections::HashSet;
 use std::iter;
 use std::sync::Arc;
 
-use egui::{ClippedMesh, Texture};
+use egui::{ClippedMesh, Texture, TextureId};
+use image::RgbaImage;
 use vulkano::buffer::{BufferUsage, DeviceLocalBuffer};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer,
 };
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
-use vulkano::image::{ImageUsage, SwapchainImage};
+use vulkano::format::Format;
+use vulkano::image::view::ImageView;
+use vulkano::image::{ImageDimensions, ImageUsage, ImmutableImage, MipmapsCount, SwapchainImage};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::instance::Instance;
 use vulkano::swapchain::{AcquireError, PresentMode, Surface, Swapchain};
@@ -23,7 +26,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
 pub use error::RendererCreationError;
-use error::{RenderError, ResizeError, TransferCommandBufferCreationError};
+use error::{ImageRegisterError, RenderError, ResizeError, TransferCommandBufferCreationError};
 
 use crate::config::Config;
 
@@ -277,6 +280,27 @@ impl Renderer {
         )?;
         builder.update_buffer(uniform_buffer, Box::new(self.camera_ubo))?;
         Ok(builder.build()?)
+    }
+
+    pub fn register_ui_image(
+        &mut self,
+        image: &RgbaImage,
+    ) -> Result<TextureId, ImageRegisterError> {
+        let pixels: Vec<_> = image.pixels().flat_map(|p| p.0).collect();
+        let (image, future) = ImmutableImage::from_iter(
+            pixels,
+            ImageDimensions::Dim2d {
+                width: image.width(),
+                height: image.height(),
+                array_layers: 1,
+            },
+            MipmapsCount::One,
+            Format::R8G8B8A8_SRGB, // todo: remove hardcoded format
+            self.transfer_queue.clone(),
+        )?;
+        future.flush()?;
+        let image_view = ImageView::new(image)?;
+        Ok(self.ui_draw_system.register_texture(image_view)?)
     }
 
     /// Render new frame into the underlying window.

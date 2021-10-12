@@ -4,6 +4,8 @@ use thiserror::Error;
 use vulkano::command_buffer::{BuildError, CommandBufferExecError, UpdateBufferError};
 use vulkano::descriptor_set::DescriptorSetError;
 use vulkano::device::DeviceCreationError;
+use vulkano::image::view::ImageViewCreationError;
+use vulkano::image::ImageCreationError;
 use vulkano::instance::debug::DebugCallbackCreationError;
 use vulkano::instance::InstanceCreationError;
 use vulkano::memory::DeviceMemoryAllocError;
@@ -117,4 +119,20 @@ pub enum RenderError {
 
     #[error("failed to resize while rendering: {0}")]
     Resize(#[from] ResizeError),
+}
+
+/// Error of registering an image for UI.
+#[derive(Debug, Error)]
+pub enum ImageRegisterError {
+    #[error("descriptor set for image creation failure: {0}")]
+    DescriptorSetCreation(#[from] DescriptorSetCreationError),
+
+    #[error("image creation failure: {0}")]
+    ImageCreation(#[from] ImageCreationError),
+
+    #[error("image creation failure: {0}")]
+    ImageViewCreation(#[from] ImageViewCreationError),
+
+    #[error("flush error: {0}")]
+    Flush(#[from] FlushError),
 }

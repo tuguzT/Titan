@@ -13,6 +13,7 @@ chrono = "0.4"
 egui = "0.14"
 log = "0.4"
 log4rs = "1.0"
+image = "0.23"
 
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-glue = "0.3"

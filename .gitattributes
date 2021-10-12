@@ -1,2 +1,22 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Rust language
+*.rs       text diff=rust
+*.toml     text diff=toml
+Cargo.lock text
+
+# Images
+*.bmp      binary
+*.exr      binary
+*.gif      binary
+*.hdr      binary
+*.iff      binary
+*.jpeg     binary
+*.jpg      binary
+*.pict     binary
+*.png      binary
+*.psd      binary
+*.tga      binary
+*.tif      binary
+*.tiff     binary
