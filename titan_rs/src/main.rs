@@ -6,7 +6,6 @@ use std::error::Error;
 use std::io::Cursor;
 
 use egui::{TopBottomPanel, Window};
-use image::ImageFormat;
 
 use titan_core::{app::DeltaTime, config::Config, window::Event};
 
@@ -33,7 +32,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let mut application = titan_core::init(config)?;
 
     let image_data = include_bytes!("../res/angry flop.jpg");
-    let image = image::io::Reader::with_format(Cursor::new(image_data), ImageFormat::Jpeg)
+    let image = image::io::Reader::new(Cursor::new(image_data))
+        .with_guessed_format()?
         .decode()?
         .to_rgba8();
     let texture_id = application.register_ui_image(&image)?;
