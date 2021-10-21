@@ -5,7 +5,7 @@ authors = ["tuguzT <timurka.tugushev@gmail.com>"]
 description = "API for simple game engine based on Rust and Vulkan API"
 repository = "https://github.com/tuguzT/titan_rs"
 readme = "../README.md"
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["rlib", "cdylib"]

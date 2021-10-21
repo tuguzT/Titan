@@ -1,3 +1,2 @@
 [workspace]
 members = ["titan_core", "titan_ecs", "titan_rs"]
-resolver = "2"
