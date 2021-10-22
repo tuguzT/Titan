@@ -15,9 +15,9 @@ mod tests;
 ///
 /// Components should be just POD (plain old data).
 ///
-pub trait Component: Copy + Any + Send + Sync + 'static {}
+pub trait Component: Any + Send + Sync {}
 
-impl<T> Component for T where T: Copy + Any + Send + Sync + 'static {}
+impl<T> Component for T where T: Any + Send + Sync {}
 
 new_key_type! {
     /// Unique identifier of the *component* of ECS.

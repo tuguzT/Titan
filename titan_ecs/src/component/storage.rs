@@ -38,8 +38,7 @@ where
     ///
     pub fn insert(&mut self, entity: Entity, component: T) -> Option<T> {
         if self.attached(entity) {
-            let prev = *self.get(entity)?;
-            *self.get_mut(entity)? = component;
+            let prev = std::mem::replace(self.get_mut(entity)?, component);
             return Some(prev);
         }
         let id = self.components.insert(component);
@@ -113,8 +112,7 @@ where
     T: Component,
 {
     component_to_entity: SecondaryMap<ComponentID, Entity>,
-    components: HopSlotMap<ComponentID, T>,
-    index: usize,
+    components: ::slotmap::hop::IntoIter<ComponentID, T>,
 }
 
 impl<T> Iterator for IntoIter<T>
@@ -124,10 +122,9 @@ where
     type Item = (Entity, T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (id, component) = self.components.iter().nth(self.index)?;
-        self.index += 1;
+        let (id, component) = self.components.next()?;
         let entity = self.component_to_entity.get(id)?;
-        Some((*entity, *component))
+        Some((*entity, component))
     }
 }
 
@@ -141,8 +138,7 @@ where
     fn into_iter(self) -> Self::IntoIter {
         IntoIter {
             component_to_entity: self.component_to_entity,
-            components: self.components,
-            index: 0,
+            components: self.components.into_iter(),
         }
     }
 }
