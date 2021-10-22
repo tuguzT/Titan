@@ -1,22 +1,20 @@
 //! Utilities for managing component storages.
 
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use anymap::AnyMap;
 
 use super::{super::Entity, Component, ComponentStorage};
 
 /// Manager of all components of ECS.
-#[derive(Default)]
 #[repr(transparent)]
 pub struct ComponentManager {
-    storages: HashMap<TypeId, Box<dyn Any>>,
+    _storages: AnyMap,
 }
 
 impl ComponentManager {
     /// Creates new component manager.
     pub fn new() -> Self {
         Self {
-            storages: HashMap::new(),
+            _storages: AnyMap::new(),
         }
     }
 
@@ -80,28 +78,27 @@ impl ComponentManager {
     where
         T: Component,
     {
-        let typeid = TypeId::of::<T>();
-        let boxed = self.storages.get(&typeid)?;
-        Some(boxed.downcast_ref().expect("downcast error"))
+        self._storages.get()
     }
 
     fn get_storage_mut<T>(&mut self) -> Option<&mut ComponentStorage<T>>
     where
         T: Component,
     {
-        let typeid = TypeId::of::<T>();
-        let boxed = self.storages.get_mut(&typeid)?;
-        Some(boxed.downcast_mut().expect("downcast error"))
+        self._storages.get_mut()
     }
 
     fn create_storage<T>(&mut self) -> &mut ComponentStorage<T>
     where
         T: Component,
     {
-        let typeid = TypeId::of::<T>();
-        let boxed = Box::new(ComponentStorage::<T>::new());
-        self.storages.insert(typeid, boxed);
-        let boxed = self.storages.get_mut(&typeid).unwrap();
-        boxed.downcast_mut().expect("downcast error")
+        self._storages.insert(ComponentStorage::<T>::new());
+        self.get_storage_mut().unwrap()
+    }
+}
+
+impl Default for ComponentManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
