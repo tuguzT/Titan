@@ -96,7 +96,7 @@ impl ObjectDrawSystem {
 
         let vertex_buffer = {
             let (vertex_buffer, future) = ImmutableBuffer::from_iter(
-                self::vertices().iter().cloned(),
+                self::vertices(),
                 BufferUsage::vertex_buffer(),
                 graphics_queue.clone(),
             )?;
@@ -106,7 +106,7 @@ impl ObjectDrawSystem {
 
         let index_buffer = {
             let (index_buffer, future) = ImmutableBuffer::from_iter(
-                self::indices().iter().cloned(),
+                self::indices(),
                 BufferUsage::index_buffer(),
                 graphics_queue.clone(),
             )?;
