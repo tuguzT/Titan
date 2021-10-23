@@ -1,20 +1,20 @@
 //! Utilities for managing component storages.
 
-use anymap::AnyMap;
+use anymap2::SendSyncAnyMap;
 
 use super::{super::Entity, Component, ComponentStorage};
 
 /// Manager of all components of ECS.
 #[repr(transparent)]
 pub struct ComponentManager {
-    _storages: AnyMap,
+    _storages: SendSyncAnyMap,
 }
 
 impl ComponentManager {
     /// Creates new component manager.
     pub fn new() -> Self {
         Self {
-            _storages: AnyMap::new(),
+            _storages: SendSyncAnyMap::new(),
         }
     }
 
