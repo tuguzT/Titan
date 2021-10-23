@@ -2,7 +2,7 @@
 
 use std::ops::{Index, IndexMut};
 
-use slotmap::{HopSlotMap, SecondaryMap};
+use slotmap::{hop::IntoIter as IntoIterHop, HopSlotMap, SecondaryMap};
 
 use super::{super::Entity, Component, ComponentID};
 
@@ -112,7 +112,7 @@ where
     T: Component,
 {
     component_to_entity: SecondaryMap<ComponentID, Entity>,
-    components: ::slotmap::hop::IntoIter<ComponentID, T>,
+    components: IntoIterHop<ComponentID, T>,
 }
 
 impl<T> Iterator for IntoIter<T>

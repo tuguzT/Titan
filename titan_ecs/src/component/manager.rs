@@ -9,14 +9,14 @@ use super::{super::Entity, Component, ComponentStorage};
 #[derive(Default)]
 #[repr(transparent)]
 pub struct ComponentManager {
-    storages: HashMap<TypeId, Box<dyn Any>>,
+    _storages: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl ComponentManager {
     /// Creates new component manager.
     pub fn new() -> Self {
         Self {
-            storages: HashMap::new(),
+            _storages: HashMap::new(),
         }
     }
 
@@ -81,7 +81,7 @@ impl ComponentManager {
         T: Component,
     {
         let typeid = TypeId::of::<T>();
-        let boxed = self.storages.get(&typeid)?;
+        let boxed = self._storages.get(&typeid)?;
         Some(boxed.downcast_ref().expect("downcast error"))
     }
 
@@ -90,7 +90,7 @@ impl ComponentManager {
         T: Component,
     {
         let typeid = TypeId::of::<T>();
-        let boxed = self.storages.get_mut(&typeid)?;
+        let boxed = self._storages.get_mut(&typeid)?;
         Some(boxed.downcast_mut().expect("downcast error"))
     }
 
@@ -100,8 +100,8 @@ impl ComponentManager {
     {
         let typeid = TypeId::of::<T>();
         let boxed = Box::new(ComponentStorage::<T>::new());
-        self.storages.insert(typeid, boxed);
-        let boxed = self.storages.get_mut(&typeid).unwrap();
+        self._storages.insert(typeid, boxed);
+        let boxed = self._storages.get_mut(&typeid).unwrap();
         boxed.downcast_mut().expect("downcast error")
     }
 }
