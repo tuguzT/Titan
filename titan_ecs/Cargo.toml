@@ -12,4 +12,3 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 slotmap = "1.0"
-anymap2 = "0.13"
