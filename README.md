@@ -6,3 +6,5 @@ Simple game engine based on Rust and Vulkan API.
 
 It is in a ***very-very early*** development stage.
 And it does not follow *semver* versioning for now.
+
+No longer maintained and will be rewritten (with module structure).
